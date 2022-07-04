@@ -1,0 +1,4 @@
+Pillow>=6.2.0
+requests>=2.20.1
+requests-toolbelt==0.9.1
+shortuuid==1.0.8
