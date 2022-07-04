@@ -2,6 +2,7 @@ dist/
 mkpy.egg-info/*
 __pycache__/
 mindkosh.egg-info/
+build
 build/*
 mindkosh/*.pyc
 *.zip
