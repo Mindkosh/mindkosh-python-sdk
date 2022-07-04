@@ -9,17 +9,14 @@ class Project:
 
     def __init__( self, token='', verbose_output=True, server_host='app.mindkosh.com', server_port='80', https=True ):
         
-        # Check for token in evironment variables, if not set it to blank string
-        if 'MK_TOKEN' in os.environ:
+        self.token = token
+        
+        if self.token!="" and 'MK_TOKEN' in os.environ:
             self.token = os.environ.get('MK_TOKEN')
-
-        if self.token=="":
-            self.token = token
         
         if self.token=="":
             raise Exception( "No Access token specified." )
 
-        #If env variable MK_TOKEN doesn't exist, token must be specified maunally per object
         self.auth_header = { "Authorization": "Token " + self.token}
 
         self.verbose_output = verbose_output
@@ -28,7 +25,11 @@ class Project:
         self.server_port = server_port
         self.https = https
 
-        api = MINDKOSH_API_V1('%s:%s' % (self.server_host, self.server_port), self.https)
+        if( str(self.server_port) != "80"):
+            api = MINDKOSH_API_V1('%s:%s' % (self.server_host, self.server_port), self.https)
+        else:
+            api = MINDKOSH_API_V1( self.server_host, self.https )
+
         self.api = api
         session = requests.Session()
         self.session = session

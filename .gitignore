@@ -1,0 +1,9 @@
+dist/
+mkpy.egg-info/*
+__pycache__/
+mindkosh.egg-info/
+build/*
+mindkosh/*.pyc
+*.zip
+mindkosh/__pycache__/
+mindkosh/__pycache__/*
