@@ -1,10 +1,11 @@
-# MindKosh Python SDK
-Label your datasets the easy way.
+# Mindkosh Python SDK
+
+The Mindkosh Python SDK offers a simple, user-friendly way to interact with the Mindkosh data annotation platform.
 
 Easily manage large Data labeling projects and the teams that work on them. All while using a feature-rich Annotation tool.
+Learn more about the [Mindkosh data annotaiton platform](#https://mindkosh.com/annotation-platform)
 
-The Mindkosh Python SDK offers a simple, user-friendly way to interact with the Mindkosh back-end.
-
+[Read documentation](#https://docs.mindkosh.com/getting-started/welcome)
 
 ## Table of contents:
 * [Setup](#setup)
