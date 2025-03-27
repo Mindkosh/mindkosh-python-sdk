@@ -1,0 +1,31 @@
+{
+    "images": [
+        {
+            "path": "images/l1.jpg",
+            "rotate": 90
+        },
+        {
+            "path": "images/l2.jpg",
+            "crop": [
+                50,
+                50,
+                50,
+                50
+            ],
+            "rotate": 180
+        },
+        {
+            "path": "images/l3.jpg",
+            "crop": [
+                100,
+                0,
+                0,
+                0
+            ]
+        },
+        {
+            "path": "images/l4.png",
+            "rotate": 270
+        }
+    ]
+}

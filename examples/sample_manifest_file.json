@@ -1,0 +1,29 @@
+{
+    "images": [
+        {
+            "path": "~/images/lindau_000000_000019_leftImg8bit.png-small.jpg"
+        },
+        {
+            "path": "~/images/lindau_000023_000019_leftImg8bit.png-small.jpg",
+            "crop": [
+                100,
+                100,
+                500,
+                500
+            ],
+            "rotate": 90
+        }
+    ],
+    "folders": [
+        {
+            "path": "~/images/dir_one",
+            "crop": [
+                40,
+                100,
+                700,
+                800
+            ],
+            "rotate": 180
+        }
+    ]
+}

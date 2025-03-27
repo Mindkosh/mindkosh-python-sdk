@@ -1,444 +1,833 @@
-# Copyright (C) 2022 Mindkosh Technologies. All rights reserved.
+# Copyright (C) 2023 Mindkosh Technologies. All rights reserved.
 # Author: Parmeshwar Kumawat
 
-import re
 import os
-import sys
-import glob
 import time
+import logging
 import requests
-from requests_toolbelt.multipart.encoder import MultipartEncoder
+import validators
 
-from .core import MINDKOSH_API_V1
-from .utils import ResourceType
+import matplotlib.pyplot as plt
+import matplotlib.patches as patches
+from matplotlib.lines import Line2D
+import matplotlib.colors
+import mplcursors
+
+try:
+    import open3d as o3d
+except ImportError:
+    pass
+from PIL import Image
+from io import BytesIO
+
+import mimetypes
+import tempfile
+
+from .utils import TaskProperty, AnnotationFormats, verify_name
+from .label import Label, Attribute
+from .issue import Issue, Comment
+from .annotations.tag import Tag
+from .annotations.manager import _verify_annotations
+from .exceptions import InvalidTagError, InvalidLabelError
+
+logger = logging.getLogger(__name__)
+
+class DatasetFile:
+    def __init__(self, id, original_name, size, meta_data, tags, **kwargs):
+        self.id = id
+        self.name = original_name
+        self.size = size
+        self.meta_data = meta_data
+        self.tags = tags
+        self.presigned_url = kwargs.get('presigned_url', None)
+
+    def __repr__(self):
+        return self.name
+
+class Frame:
+
+    def __init__(
+        self,
+        frame_id: int,
+        job_id: int,
+        datasetfile: DatasetFile,
+        task_id: int,
+        labels: list
+    ):
+        self.frame_id = frame_id
+        self.datasetfile = datasetfile
+        self.task_id = task_id
+        self.job_id = job_id
+        self.labels = labels  # task labels
+
+    def __str__(self):
+        return str({"frame_id": self.frame_id, "datasetfile": self.datasetfile, "task_id": self.task_id})
+
+    def __repr__(self):
+        return self.datasetfile.name
+
+    def _get_presigned_url(self):
+        url = self.client.api.download_dataset_file(self.datasetfile.id)
+        response = self.client.session.post(url)
+        response.raise_for_status()
+        return response.json()["presigned_url"]
+
+    def im(self):
+        """
+        Returns : a PIL.Image object
+
+        """
+        if not self.datasetfile.presigned_url:
+            self.datasetfile.presigned_url = self._get_presigned_url()
+        try:
+            response = requests.get(self.datasetfile.presigned_url)
+            # FIXME: re-try with a new presigned url if it's expired already
+            _im = Image.open(BytesIO(response.content))
+            return _im
+        except Exception as e:
+            raise e
+
+    def tags(self):
+        """returns list of classification tags 
+        """
+        tags_ = self.annotations()["tags"]
+        _tags = []
+        for tag in tags_:
+            for label in self.labels:
+                if label.id == tag["label_id"]:
+                    _tags.append(Tag(**tag, label_name=label.name))
+                    break
+        return _tags
+
+    def issues(self):
+        issues = Issue.get_frame_issues(
+            self.client, self.frame_id, self.job_id)
+        return issues
+
+    def annotations(self):
+        try:
+            url = self.client.api.frame_annotations(
+                self.task_id, self.frame_id)
+            response = self.client.session.get(url)
+            response.raise_for_status()
+        except requests.exceptions.HTTPError as e:
+            raise e
+        return response.json()
+
+    def download(self, location):
+        try:
+            im = self.im()
+            mime_type = im.get_format_mimetype() or 'image/jpg'
+            im_ext = mimetypes.guess_extension(mime_type)
+            if im_ext == None:
+                im_ext = '.jpg'
+            outfile = f"task-{self.task_id}_frame-{self.frame_id}{im_ext}"
+            fullpath = os.path.join(location, outfile)
+            im.save(fullpath)
+            print("Saved :", fullpath)
+
+        except requests.exceptions.HTTPError as e:
+            raise e
+
+    def add_issue(self, issue_name: str, shape_id: int = None, track_id: int = None, message: str = None):
+        issue_name = verify_name(issue_name, 'issue')
+
+        issue_id = Issue.create_ticket(
+            client=self.client,
+            frame=self.frame_id,
+            job=self.job_id,
+            ticket_name=issue_name,
+            dimension='2d',
+            shape_id=shape_id,
+            track_id=track_id
+        )
+
+        if message:
+            Comment.add_comment(self.client, issue_id, message)
+
+    def add_issue_comment(self, issue_id, message):
+        Comment.add_comment(self.client, issue_id, message)
+
+    def visualize(
+            self,
+            show_annotations=True,
+            show_issues=True,
+            fill_color=0.35
+    ):
+
+        if self.datasetfile.size > 4*10**6:
+            raise Exception('can not visualize large files')
+        im = self.im()
+        plt.rcParams['figure.dpi'] = 110
+        plt.rcParams['image.interpolation'] = 'none'
+        fig, ax = plt.subplots()
+
+        fig.canvas.manager.toolbar.pack(side='bottom')  # fill='y'
+        ax.imshow(im)
+        plt.title(self.datasetfile.name)
+
+        legends = set()
+
+        if show_annotations == False:
+            return plt.show()
+
+        if not (isinstance(fill_color, (int, float))) or not (0.0 <= fill_color <= 1.0):
+            raise ValueError("fill_color should be in range of 0 to 1")
+
+        annotations = self.annotations()
+
+        shapes = annotations["shapes"]
+        label_names = set()
+        self._patches = []
+
+        for shape in shapes:
+            tool_type = shape["type"]
+            if not tool_type:
+                continue
+                # return plt.show()
+            points = shape["points"]
+            edgecolor = "w"
+            for label in self.labels:
+                if label.id == shape["label_id"]:
+                    edgecolor = matplotlib.colors.to_rgb(label.color)
+                    facecolor = edgecolor + (fill_color,)
+                    break
+
+            if tool_type == "rectangle":
+                rect = patches.Rectangle((points[0], points[1]), points[2]-points[0], points[3] -
+                                         points[1], linewidth=1, edgecolor=edgecolor, facecolor=facecolor, label=label.name)
+                liness = ax.add_patch(rect)
+                self._patches.append(liness)
+
+            elif tool_type == "polygon":
+                polygon = patches.Polygon([(points[2*i], points[2*i+1]) for i in range(len(
+                    points)//2)], linewidth=1, edgecolor=edgecolor, facecolor=facecolor, label=label.name)
+                liness = ax.add_patch(polygon)
+                self._patches.append(liness)
+
+            elif tool_type == "polyline":
+                x = [points[2*i] for i in range(len(points)//2)]
+                y = [points[2*i+1] for i in range(len(points)//2)]
+                liness = plt.plot(x, y, c=label.color,
+                                  linewidth=1, label=label.name)
+
+            elif tool_type == "cuboid":
+                continue
+
+            elif tool_type == "points":
+                x = [points[2*i] for i in range(len(points)//2)]
+                y = [points[2*i+1] for i in range(len(points)//2)]
+                liness = plt.scatter(x, y, c=label.color,
+                                     s=10, label=label.name)
+                self._patches.append(liness)
+
+            if label.name not in label_names:
+                legend_element = (Line2D([0], [0], marker='o', label=label.name,
+                                  markerfacecolor=label.color, c=label.color, markersize=5, ls=''))
+                legends.add(legend_element)
+                label_names.add(label.name)
+
+        if legends:
+            ax.legend(handles=legends)
+
+        def plot_issue(position, label):
+            issue_rect = patches.Rectangle((position[0], position[1]), position[2]-position[0],
+                                           position[3]-position[1], linewidth=1, edgecolor=None,
+                                           facecolor=(0, 0, 0, 0), hatch='--', label=label)
+            issue_border = ax.add_patch(issue_rect)
+            self._patches.append(issue_border)
+
+        cursor = mplcursors.cursor(self._patches, hover=True)
+        self._patches = None
+
+        def set_annotations(sel):
+            sel.annotation.set_text(sel.artist.get_label())
+        cursor.connect("add", set_annotations)
+
+        def remove_annotations(event):
+            if event.xdata or event.ydata:
+                for s in cursor.selections:
+                    cursor.remove_selection(s)
+        plt.connect('motion_notify_event', remove_annotations)
+        plt.show()
+
+
+class PointCloud:
+    def __init__(
+        self,
+        frame_id: int,
+        job_id: int,
+        datasetfile: DatasetFile,
+        task_id: int,
+        labels: list
+    ):
+        self.frame_id = frame_id
+        self.datasetfile = datasetfile
+        self.task_id = task_id
+        self.job_id = job_id
+        self.labels = labels  # task labels
+
+    def __str__(self):
+        return str({"frame_id": self.frame_id, "datasetfile": self.datasetfile, "task_id": self.task_id})
+
+    def __repr__(self):
+        return self.datasetfile.name
+
+    def issues(self):
+        issues = Issue.get_frame_issues(
+            self.client, self.frame_id, self.job_id)
+        return issues
+
+    def add_issue(self, issue_name, shape_id: int = None, track_id: int = None, message: str = None):
+        issue_name = verify_name(issue_name, 'issue')
+
+        issue_id = Issue.create_ticket(
+            client=self.client,
+            frame=self.frame_id,
+            job=self.job_id,
+            dimention='3d',
+            ticket_name=issue_name,
+            shape_id=shape_id,
+            track_id=track_id
+        )
+
+        if message:
+            Comment.add_comment(self.client, issue_id, message)
+
+    def add_issue_comment(self, issue_id, message):
+        Comment.add_comment(self.client, issue_id, message)
+
+    @property
+    def file(self):
+        try:
+            url = self.client.api.download_dataset_file(self.datasetfile.id)
+            response = self.client.session.post(url)
+            response.raise_for_status()
+            response = requests.get(response.json()["presigned_url"])
+        except requests.exceptions.HTTPError as e:
+            raise e
+        return response.content
+
+    def annotations(self):
+        try:
+            url = self.client.api.frame_annotations(
+                self.task_id, self.frame_id)
+            response = self.client.session.get(url)
+            response.raise_for_status()
+        except requests.exceptions.HTTPError as e:
+            raise e
+        return response.json()
+
+    @staticmethod
+    def _verify_color(color):
+        assert isinstance(color, tuple) and len(color) == 3
+        for c in color:
+            if not isinstance(c, int) or c < 0 or c > 255:
+                raise Exception("Invalid color")
+
+    def visualize(
+        self,
+        show_annotations=True,
+        bg=(0, 0, 0),
+        points_color=None,
+    ):
+        self.show_annotations = show_annotations
+        self.points_color = points_color
+
+        self._verify_color(bg)
+        if bg:
+            return
+
+        file = tempfile.NamedTemporaryFile(suffix='.pcd').name
+        with open(file, 'wb') as fp:
+            fp.write(self.file)
+        pcd = o3d.io.read_point_cloud(file)
+
+        # visualizer
+        vis = o3d.visualization.Visualizer()
+        vis.create_window(window_name=self.datasetfile.name)
+        vis.get_render_option().background_color = bg
+        vis.get_render_option().point_size = 1
+        vis.add_geometry(pcd)
+
+        # get frame annotations and draw
+        annotations = self.annotations()
+
+        shapes = annotations["shapes"]
+        for shape in shapes:
+            if not shape["type"]:
+                continue
+            for label in self.labels:
+                if label.id == shape["label_id"]:
+                    edgecolor = matplotlib.colors.to_rgb(label.color)
+                    break
+            _extra = shape["extra"]
+            _size = _extra["parameter"]
+
+            # create bbox
+            box = o3d.geometry.TriangleMesh.create_box(
+                width=_size["w"], depth=_size["h"], height=_size["l"]
+            )
+            box.compute_vertex_normals()
+            box.paint_uniform_color([1.0, 1.0, 1.0])
+
+            box_mesh = o3d.geometry.LineSet.create_from_triangle_mesh(box)
+            box_mesh.paint_uniform_color(edgecolor)
+
+            # get center coordinates using center point
+            _center_point = _extra['center_point']
+            _center = pcd.points[_center_point]
+
+            # get center of mesh
+            c1 = _center[0] - (_size['l']/2)
+            c2 = _center[1] - (_size['w']/2)
+            c3 = _center[2] - (_size['l']/2)
+
+            box_mesh.translate((c1, c2, c3))
+            vis.add_geometry(box_mesh)
+
+        vis.run()
+        vis.destroy_window()
+
 
 class Task:
-
-    def __init__(self, token='', verbose_output=True, server_host='app.mindkosh.com', server_port='80', https=True):
-        
-        self.token = token
-        
-        if self.token!="" and 'MK_TOKEN' in os.environ:
-            self.token = os.environ.get('MK_TOKEN')
-        
-        if self.token=="":
-            raise Exception( "No Access token specified." )
-
-        self.auth_header = { "Authorization": "Token " + self.token}
-
-        self.verbose_output = verbose_output
-
-        self.available_formats = {
-                                "coco": "COCO 1.0",
-                                "datumaro": "Datumaro 1.0",
-                                "pascal": "PASCAL VOC 1.1",
-                                "segmentation_mask":"Segmentation mask 1.1",
-                                "yolo":"YOLO 1.1"
-                            }
-        self.server_host = server_host
-        self.server_port = server_port
-        self.https = https
-
-        if( str(self.server_port) != "80"):
-            api = MINDKOSH_API_V1('%s:%s' % (self.server_host, self.server_port), self.https)
-        else:
-            api = MINDKOSH_API_V1( self.server_host, self.https )
-
-        self.api = api
-        session = requests.Session()
-        self.session = session
-
-
-    def delete(self, task_id):
-
-        try:
-            url = self.api.tasks_id(task_id)
-            response = self.session.delete(url, headers=self.auth_header)
-            response.raise_for_status()
-            if self.verbose_output == True :
-                print(f"Task id {task_id} deleted")
-        except requests.exceptions.HTTPError as e:  
-            print(e)
-
-
-    def update_name(self,task_id,name):
-
-        if not name or set(name)=={' '}:
-            print("Enter a valid task name")
-            return
-
-        try:
-            url = self.api.tasks_id(task_id)
-            response = self.session.patch(url, json={"name":name}, headers=self.auth_header)
-            response.raise_for_status()
-            if self.verbose_output == True :
-                print(f"Task id {task_id} updated. New name : {name}")
-        except requests.exceptions.HTTPError as e:
-            print(e)
-
-
-    def update_project_id(self,task_id,new_project_id):
-
-        project_id = new_project_id
-        #if new project id is None then we will remove the project from the task, else we need a valid project id
-        if project_id:
-            p_url = self.api.projects_id(project_id)
-            p_response = self.session.get(p_url, headers=self.auth_header)
-
-            if p_response.status_code==404:
-                print(f"project id {project_id} not found")
-                return 
-
-        try:
-            url = self.api.tasks_id(task_id)
-            response = self.session.patch(url, json={'project_id':project_id}, headers=self.auth_header)
-            response.raise_for_status()
-            if self.verbose_output == True :
-                print(f"Task id {task_id} updated. New project_id : {project_id}")
-        except requests.exceptions.HTTPError as e:
-            print(e)
-
-
-    def download_annotations(self, task_id, fileformat, filename, location, **kwargs):
-
-        if location:
-            if os.path.isdir(location)==False:
-                print(f"'{location}' is not a valid directory")
-                return
-            if location[-1]=="/":
-                filename = location + filename
-            else:    
-                filename = location + "/" + filename
-
-        
-        if fileformat not in self.available_formats.keys():
-            print(f"Fileformat should be one of '{self.available_formats.keys()}'")
-            return
-        
-        try:
-            url = self.api.tasks_id(task_id)
-            response = self.session.get(url, headers=self.auth_header)
-            response.raise_for_status()
-            response_json = response.json()
-
-            url = self.api.tasks_id_annotations_filename(task_id, response_json['name'], self.available_formats[fileformat])
-
-            while True:
-                response = self.session.get(url, headers=self.auth_header)
-                response.raise_for_status()
-                if self.verbose_output == True :
-                    print( "Processing export..", end="\r" )
-                if response.status_code == 201:
-                    break
-                else:
-                    time.sleep(2)
-                    
-
-            response = self.session.get(url + '&action=download', headers=self.auth_header)
-            response.raise_for_status()
-            with open(filename, 'wb') as fp:
-                fp.write(response.content)
-                print(f"Downloaded : {filename}")
-
-
-        except requests.exceptions.HTTPError as e:
-            print(e)
-
-
-    
-    def create(self,name,labels,resources,project_id=None,segment_size=0,recursive=False,category="imageset",resource_type="local",**kwargs):
-
-        if not name or set(name)=={' '}:
-            print("Enter a valid task name")
-            return
-
-        if verify_labels(labels)==False:
-            return
-
-        if resource_type=="local":
-            files = verify_resources(resources,recursive,category)
-            if files==False:
-                return
-            if files==[]:
-                print("No data to be uploaded")
-                return
-        else:
-            return
-                
-        tools = [{'name': 'polygon', 'is_active': True}, {'name': 'bounding-box', 'is_active': True}, \
-                {'name': 'polyline', 'is_active': True}, {'name': 'keypoint', 'is_active': True}, \
-                 {'name': 'cuboid', 'is_active': True}]
-
-        
-        try:
-            url = self.api.tasks
-            data = {'name': name,
-                    'labels': labels,
-                    'segment_size': segment_size,
-                    'project_id': project_id,
-                    'tools' : tools,                   
-            }
-            response = self.session.post(url, json=data, headers=self.auth_header)
-            response.raise_for_status()
-            response_json = response.json()
-            task_id = response_json['id']
-            if self.verbose_output == True :
-                print(f"Task created. id : {task_id}, name : {name}")
-            
-            if category=="imageset":
-                print(f"{len(files)} images to be uploaded")
-
-            self.upload_local_data( task_id,files)
-            
-            if self.verbose_output == True :
-                print( 'Saving task to the database' )
-
-            url = self.api.tasks_id_status(task_id)
-            response = self.session.get(url, headers=self.auth_header)
-            response_json = response.json()
-
-            if response_json['state']!="Started":
-                print(response_json['message'])
-                self.delete(task_id)
-                return
-            while response_json['state'] != 'Finished':
-                msg = response_json['message']
-                if response_json["state"]=="Failed":
-                    print(msg)
-                    self.delete(task_id)
-                    return
-                msg = list(msg.split(" "))
-                if msg[0]=="Processing":
-                    print(f"{msg[3]}  Data Saved",end="\r")
-                    time.sleep(1.5)
-
-                response = self.session.get(url, headers=self.auth_header)
-                response_json = response.json()
-
-            if self.verbose_output == True :
-                print("100% ")
-                print("Data Uploaded")
-
-            if self.verbose_output == True :
-                while response_json['state'] != 'Finished':
-                    response = self.session.get(url, headers=self.auth_header)
-                    response_json = response.json()
-                    logger_string = f"Awaiting compression for task {task_id}. Status : {response_json['state']}, Message : {response_json['message']}"
-                    if self.verbose_output == True :
-                        print(logger_string)
-
-        except requests.exceptions.HTTPError as e:
-            print(e)
-    
-
-    def upload_local_data(self, task_id,files):
-
-        try:
-            url = self.api.tasks_id_data(task_id)
-            fields = {
-                    'client_files[{}]'.format(i):( os.path.basename(f), open(f, 'rb')) for i, f in enumerate(files)
-                    }
-                    
-            fields['image_quality'] = "70"
-            enc = MultipartEncoder(fields=fields)
-            headers = self.auth_header
-            headers["Content-Type"] = enc.content_type
-            response = self.session.post(url,data=enc,headers=headers)
-            response.raise_for_status()
-        except requests.exceptions.HTTPError as e:
-            print(e)
- 
-    
-    def get(self):
-        try:
-            url = self.api.tasks
-            response = self.session.get(url, headers=self.auth_header)
-            response.raise_for_status()
-            page = 1
-            v=[]
-            while True:
-                response_json = response.json()
-                
-                for r in response_json['results']:
-                    d_tmp = {}
-                    d_tmp["id"]=r["id"]
-                    d_tmp["name"] = r["name"]
-                    d_tmp["project_id"] = r["project_id"]
-                    d_tmp["project_name"] = r["project_name"] if "project_name" in r else None
-                    d_tmp["status"] = r["status"]
-                    d_tmp["owner"] = r["owner"]["name"]
-                    d_tmp["assignee"] = r["assignee"]["name"] if r["assignee"] else None
-                    d_tmp["mode"] = r["mode"]
-                    d_tmp["labels"] = r["labels"]
-                    d_tmp["size"] = r["size"] if "size" in r else None
-                    d_tmp["segment_size"] = r["segment_size"]
-                    d_tmp["category"] = r["category"] if "category" in r else None
-                    d_tmp["tools"] = [i['name'] for i in r['tools'] if i['is_active']]
-                                       
-                    v.append(d_tmp)
-        
-                if not response_json['next']:
-                    break
-                page += 1
-                url = self.api.tasks_page(page)
-                response = self.session.get(url, headers=self.auth_header)
-                response.raise_for_status()
-
-
-        except requests.exceptions.HTTPError as e:
-            print(e)
-
-        self.new_lst = {}
-        for i in v:
-            new_task = IndividualTask( self.token, self.verbose_output, self.server_host, self.server_port, self.https )
-            new_task.populate( i["id"], i["name"], i["labels"],i["mode"],i["tools"],i["status"],i["project_id"],i["project_name"],i["owner"],i["assignee"],i["segment_size"],i["size"],i["category"] )
-            all_p = new_task
-            s = {i["id"]:all_p}
-            self.new_lst.update(s)
-
-        return self.new_lst
-    
-
-class IndividualTask:
-    
-    def __init__( self, token, verbose_output, server_host, server_port, https ):
-        self.parent_task_instance = Task( token, verbose_output, server_host, server_port, https )
-
-    def populate( self, id, name, labels, mode, tools, status, project_id, project_name, owner, assignee, segment_size, size, category):
-        self.id = id
-        self.name = name
-        self.size = size
-        self.segment_size = segment_size
-        self.project_id = project_id
-        self.project_name = project_name
-        self.mode = mode
-        self.status = status
-        self.tools = tools
-        self.labels = labels
-        self.category = category
-        self.owner = owner
-        self.assignee = assignee
+    def __init__(
+        self,
+        data
+    ):
+        self.task_id = data['id']
+        self.name = data['name']
+        self.batches = data['batches']
+        self.project_id = data['project_id']
+        self.labels = [Label(**label) for label in data['labels']]
+        self.category = data['category'] if 'category' in data else None
+        self.job_modes = data['job_modes'] if 'job_modes' in data else [
+            'validation', 'qc']
+        self.dimension = data['dimension']
+        self.multi_annotators = data['multi_annotators']
+        self.data = data['data']
+        self._segments = data['segments']
 
     def __str__(self):
         return str(self.__dict__)
 
+    def __repr__(self):
+        return self.name
+
+    @property
+    def meta(self):
+        meta_data = self.client.session.get(
+            url=self.client.api.task_data_meta(),
+            json={'task_id': self.task_id}
+        )
+        meta_data.raise_for_status()
+        meta_data = meta_data.json()
+        return {'size': meta_data['size'], 'tags': meta_data['tags']}
+
+    @property
+    def job_id_frame_ids_mapping(self):
+        if not hasattr(self, '_job_id_frame_ids_mapping'):
+            self._job_id_frame_ids_mapping = {}
+            for segment in self._segments:
+                self._job_id_frame_ids_mapping[segment['job']['id']] = (
+                    segment['start_frame'], segment['stop_frame'])
+        return self._job_id_frame_ids_mapping
+
+    def frames(self, search: str = None, max_frames: int = 10):
+        # TODO: allow page number in params
+        if self.category == 'video':
+            return
+
+        limit = max_frames if max_frames <= 50 else 50
+        url = self.client.api.task_data_frames(
+            self.task_id, limit, search=search, download=0)
+        response = self.client.session.get(
+            url=url)
+        response.raise_for_status()
+        frames = response.json()['results']
+
+        frame_objs = []
+        frames_job_id_mapping = self.job_id_frame_ids_mapping
+        for frame in frames:
+            frame_id = frame['frame']
+            for job_id, (start_frame, stop_frame) in frames_job_id_mapping.items():
+                if start_frame <= job_id <= stop_frame:
+                    break
+            dataset_file = frame['dataset_file']
+            datasetfile = DatasetFile(
+                dataset_file['id'],
+                dataset_file['name'].split('_', 1)[-1],
+                dataset_file['size'],
+                dataset_file['meta_data'] if 'meta_data' in dataset_file else {},
+                dataset_file['tags'] if 'tags' in dataset_file else [],
+                presigned_url=dataset_file['presigned_url'] if 'presigned_url' in dataset_file else None
+            )
+            if self.dimension == '2d':
+                frame_objs.append(
+                    Frame(frame_id, job_id, datasetfile, self.task_id, self.labels))
+            else:
+                frame_objs.append(PointCloud(
+                    frame_id, job_id, datasetfile, self.task_id, self.labels))
+        return frame_objs
+
+    def add_annotation_issue(
+        self,
+        frame_id: int,
+        issue_name: str,
+        shape_id: int = None,
+        track_id: int = None,
+        message: str = None
+    ):
+        if frame_id < 0 or frame_id >= self.meta['size']:
+            raise Exception('Invalid frame id')
+        if not issue_name or not isinstance(issue_name, str):
+            raise Exception('Invalid issue name')
+
+        for job_id, (start_frame, stop_frame) in self.job_id_frame_ids_mapping.items():
+            if start_frame <= job_id <= stop_frame:
+                break
+
+        issue_id = Issue.create_ticket(
+            client=self.client,
+            frame=frame_id,
+            job=job_id,
+            ticket_name=issue_name,
+            dimension=self.dimension,
+            shape_id=shape_id,
+            track_id=track_id
+        )
+
+        if message:
+            Comment.add_comment(self.client, issue_id, message)
+
     def delete(self):
-        self.parent_task_instance.delete( self.id )
+        self._delete_task(self.client, self.task_id)
 
-    def update_name(self,name):
-        self.parent_task_instance.update_name( self.id,name )
+    def update_name(self, name):
+        name = verify_name(name, 'task')
 
-    def update_project( self, new_project_id ):
-        self.parent_task_instance.update_project_id( self.id, new_project_id )
+        try:
+            url = self.client.api.tasks_id(self.task_id)
+            response = self.client.session.patch(
+                url,
+                json={"name": name}
+            )
+            response.raise_for_status()
 
-    def download_annotations( self, fileformat="COCO 1.0", filename=None, location=None ):
-        if not filename:
-            filename = str(self.id) + "_" + fileformat + ".zip"
-        self.parent_task_instance.download_annotations( self.id, fileformat, filename, location )
+            if self.client.verbose_output == True:
+                print(f"Task id {self.task_id} updated. New name : {name}")
+                self.name = name
 
+        except requests.exceptions.HTTPError as e:
+            raise e
 
+    def update_project_id(self, new_project_id: int):
+        task_id = self.task_id
+        project_id = new_project_id
 
-def verify_resources(resources,recursive,category):
+        if project_id:
+            p_url = self.client.api.projects_id(project_id)
+            p_response = self.client.session.get(p_url)
 
-    files = []
-    if not (category=="imageset" or category=="video"):
-        print("category can be either imageset or video")
-        return False
+            if p_response.status_code == 404:
+                raise Exception(f"project id {project_id} not found")
 
-    if category=="video":
-        if type(resources)==list:
-            if len(resources)!=1:
-                print("Please upload a single video file")
+        try:
+            url = self.client.api.tasks_id(task_id)
+            response = self.client.session.patch(
+                url, json={'project_id': project_id})
+            response.raise_for_status()
+            if self.client.verbose_output == True:
+                print(
+                    f"Task id {task_id} updated. New project_id : {project_id}")
+                self.project_id = project_id
+        except requests.exceptions.HTTPError as e:
+            raise e
+
+    def upload_annotations(self, annotation_format, local_path, webhook_url=None):
+        """
+        :param annotation_format(str): Format of annotation file
+        :param local_path(str): Path to annotations file(zip)
+        """
+        dst_format = AnnotationFormats.validate(
+            annotation_format, self.category, upload=True)
+
+        # verify if task has all the labels from annotation file
+        if self.category != 'pointcloud':
+            _verify_annotations(local_path, annotation_format, self.labels)
+
+        try:
+            url = self.client.api.tasks_id_annotations(
+                self.task_id, webhook_url, fileformat=dst_format)
+            f = open(local_path, 'rb')
+            resp = self.client.session.put(
+                url=url,
+                data={},
+                files={'annotation_file': f.read()}
+            )
+            resp.raise_for_status()
+            if resp.status_code == 202:
+                print('Annotations upload started')
             else:
-                resource = resources[0]
-        elif type(resources)==str:
-            resource = resources
+                return resp
+        except requests.exceptions.RequestException as e:
+            raise e
+
+    def get_releases(self):
+        """
+        Returns all the release for given task
+        """
+        try:
+            response = self.client.session.get(
+                url=self.client.api.releases(self.task_id)
+            )
+            return response.json()
+        except requests.exceptions.RequestException as e:
+            raise e
+
+    def create_release(self, format: str, batches: list = [], description: str = None, webhook_url=None):
+        """Creates an annotation release for given list of job_ids/batches and annotation format.
+
+        :param format: annotation format
+        :param batches: list of valid job ids for selected task
+        :param description : optional description.
+
+        - Valid annotation formats:
+
+            - 2d : 'coco', 'yolo', 'voc', 'datumaro', 'segmentation_mask', 'cvat'.
+            - 3d : 'kitti'.
+
+        - Exceptions:
+            - Invalid annotation format error.
+            - Invalid batches list for the task.
+            - A Release for given batches and format already exists.
+
+        Returns: created release(json)"""
+
+        url = self.client.api.releases(self.task_id)
+        if webhook_url:
+            if not validators.url(webhook_url):
+                raise Exception('Invalid webhook url')
+            url += f'?webhook_url={webhook_url}'
+
+        validated_format = AnnotationFormats.validate(format, self.category)
+        payload = {'task_id': self.task_id, 'description': description,
+                   'format': validated_format, 'batches': batches}
+
+        try:
+            response = self.client.session.post(
+                url, json=payload)
+            if response.status_code == requests.codes.created:
+                return response.json()
+            raise Exception(response.text)
+        except requests.exceptions.RequestException as e:
+            raise e
+
+    def delete_release(self, release_id):
+        try:
+            res = self.client.session.delete(
+                url=self.client.api.release_id(release_id)
+            )
+            if res.status_code in (requests.codes.accepted, requests.codes.no_content):
+                print(f'release_id {release_id} deleted')
+                return
+            raise Exception(res.text)
+        except requests.exceptions.RequestException as e:
+            raise e
+
+    def download_release(self, release_id: int, local_path: str, **kwargs):
+        """Downloads the release at `local_path` if it's ready to download else starts creating it.
+        """
+        if not os.path.isdir(local_path):
+            raise IOError('invalid directory ', local_path)
+
+        url = self.client.api.download_release(release_id)
+
+        resp = self.client.session.get(url)
+        resp.raise_for_status()
+        if resp.status_code == requests.codes.accepted:
+            print('Release is being prepared')
+            return
+        filename = os.path.join(local_path, f'release_id_{release_id}.zip')
+
+        response = requests.get(resp.json())
+        with open(filename, 'wb') as fp:
+            fp.write(response.content)
+            print(f"Downloaded : {filename}")
+
+    def add_label(self, label, **kwargs):
+        """
+        add/update a label to a task.
+
+        :param label: `mindkosh.Label`
+
+        Returns :  label object
+        """
+        if not isinstance(label, Label):
+            raise InvalidLabelError()
+
+        Label.verify(label)
+        Attribute.verify(label.attributes)
+
+        task_url = self.client.api.tasks_id(self.task_id)
+
+        label.attributes = [att.__dict__ for att in label.attributes]
+        payload = {"labels": [vars(label)]}
+
+        try:
+            response = self.client.session.patch(
+                task_url, json=payload)
+            response.raise_for_status()
+            print('label updated')
+            return label
+
+        except requests.exceptions.RequestException as e:
+            raise e
+
+    @classmethod
+    def create(
+        cls,
+        name: str,
+        labels: list,
+        dataset_id: int,
+        tags: list = None,
+        project_id: int = None,
+        batches: int = 1,
+        job_modes: list = ['validation'],
+        qc_data: int = 20,
+        multi_annotators: bool = False,
+        **kwargs
+    ):
+        """
+        Creates a task for given `dataset_id` and `tags`.
+
+        :param name: A valid task name.
+        :param labels: List of label objects. Each label should be an instance of `mindkosh.Label`.
+        :param dataset_id: A valid dataset_id.
+        :param project_id: Adds the task to a project (optional).
+        :param batches: Devides the task into multiple jobs.
+        :param qc_data: percentage of data that should be marked for qc.
+
+        Returns : task creation state (failed/success)
+        """
+
+        name = verify_name(name, 'task')
+
+        if not multi_annotators:
+            if not isinstance(qc_data, int) or not 0 <= qc_data <= 100:
+                raise Exception("Invalid qc_data")
         else:
-            print("Please upload a single valid video file")
-            return False
+            qc_data = 0
 
-        if not os.path.exists(resource):
-            print(f"'{resource}' does not exist")
-            return False
-        else:
-            if not resource.endswith(".mp4"):
-                print(f"'{resource}' is not an mp4 file")
-                return False
-            else:
-                return [resource]
+        job_modes = [TaskProperty.JOB_MODES(
+            mode.lower()).value for mode in job_modes]
 
-    for resource in resources:
-        if recursive==True:
-            if os.path.isdir(resource):
-                files += [y for x in os.walk(resource) for y in glob.glob(os.path.join(x[0], '*.jp*g'))]
-                files += [y for x in os.walk(resource) for y in glob.glob(os.path.join(x[0], '*.png'))]
+        labels = (labels,) if not isinstance(labels, (list, tuple)) else labels
+        for label in labels:
+            if type(label).__name__ != "Label":
+                raise InvalidLabelError(f"Invalid Label object : '{label}'")
+        Label.verify(labels)
 
-            else:
-                temp = glob.glob(resource)
-                if temp==[]:
-                    print(f"Could not find '{resource}'")
-                    return False
-                files+=temp
-        else:
-            if os.path.isdir(resource):
-                files+=[ os.path.join( resource, i ) for i in os.listdir(resource) if i.endswith(('.jpg', '.png', 'jpeg')) ]
+        labels_json = []
+        for label in labels:
+            label.attributes = [att.__dict__ for att in label.attributes]
+            labels_json.append(label.__dict__)
 
-            else:
-                temp = glob.glob(resource)
-                if temp==[]:
-                    print(f"Could not find {resource}")
-                    return False
-                files+=temp
-    return files
+        url = cls.client.api.tasks
+        payload = {
+            'name': name,
+            'labels': labels_json,
+            'batches': batches,
+            'job_modes': job_modes,
+            'tools': TaskProperty.TOOLS,
+            'data': {
+                'dataset_id': dataset_id
+            },
+            'qc_data': qc_data,
+            'multi_annotators': multi_annotators
+        }
+        if project_id:
+            payload['project_id'] = project_id
+        if tags:
+            payload['data']['tags'] = tags
 
+        try:
+            response = cls.client.session.post(
+                url,
+                json=payload
+            )
 
-def verify_labels(labels):
+            if response.status_code == requests.codes.accepted:
+                return cls._wait_till_done(response.json()['job_id'])
 
-    if not (type(labels)==list or type(labels)==tuple):
-        print("labels should be either a list or a tuple")
-        return False
+            if response.status_code == requests.codes.bad_request:
+                response = response.json()
+                if 'data' in response:
+                    data = response['data']
+                    if 'tags' in data:
+                        raise InvalidTagError(str(data['tags']))
+                    raise Exception(data['dataset_id'])
+                raise Exception(response)
 
-    names = []
-    for label in labels: 
+            response.raise_for_status()
 
-        if len(label)<2:
-            print(f"label '{label}' required at least a name and color")
-            return False
+        except requests.exceptions.RequestException as e:
+            raise e
 
-        if len(label)==2 and (("name" not in label) or ("color" not in label)):
-                print(f"label '{label}' got unexpected parameters")
-                return False
+    @classmethod
+    def _wait_till_done(cls, job_id):
+        url = cls.client.api.tasks_status(job_id)
+        while True:
+            res = cls.client.session.get(url)
+            state = res.json()['state']
+            if state == 'Finished' or state == 'Failed':
+                return state
+            time.sleep(2)
 
-        if len(label)==3:
-            if ("name" not in label) or ("color" not in label) or ("attributes" not in label):
-                print(f"label '{label}' got unexpected parameters")
-                return False
-            #check attributes
-            attributes = label["attributes"]
-            if type(attributes)!=list:
-                print(f"attributes format is not correct for label {label}")
-                return False
+    @staticmethod
+    def _delete_task(client, task_id: int):
+        try:
+            url = client.api.tasks_id(task_id)
+            response = client.session.delete(url)
+            if response.status_code == requests.codes.no_content or response.status_code == requests.codes.accepted:
+                logger.warning(f"Task id {task_id} deleted")
+                return
+            response.raise_for_status()
+        except requests.exceptions.HTTPError as e:
+            raise e
 
-        if len(label)>3:
-            print(f"label format '{label}' is not correct")
-            return False
-        
-        #Check name    
-        name = label["name"]
-        if name==None or set(name)=={" "}:
-            print(f"Please enter a valid name for label '{label}'")
-            return False
-        if name in names:
-            print("label name '{name}' is not unique")
-            return False
-        
-        #check color
-        color = label["color"]        
-        if not re.search(r'^#(?:[0-9a-fA-F]{3}){1,2}$', color):
-            print(f"color '{color}' is not valid for label '{label}'")
-            return False
-       
-        
-        names.append(name)
+    @classmethod
+    def get(cls, task_id: int = None):
+        """
+        Returns list of all task objects if `task_id` is not None else return the selected task object
+        """
 
-    return True
+        if task_id:
+            url = cls.client.api.tasks_id(task_id)
+            try:
+                response = cls.client.session.get(url)
+                response.raise_for_status()
+                return Task(response.json())
+            except requests.exceptions.HTTPError as e:
+                raise e
+
+        page = 1
+        taskobjects = []
+        while True:
+            url = cls.client.api.tasks_page(page)
+            try:
+                response = cls.client.session.get(url)
+                response.raise_for_status()
+                response_json = response.json()
+
+                for data in response_json['results']:
+                    taskobjects.append(Task(data))
+
+                if not response_json['next']:
+                    break
+                page += 1
+
+            except requests.exceptions.HTTPError as e:
+                raise e
+
+        return taskobjects

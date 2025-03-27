@@ -8,23 +8,40 @@ Learn more about the [Mindkosh data annotation platform](https://mindkosh.com/an
 [Read documentation here](https://docs.mindkosh.com/getting-started/welcome)
 
 ## Table of contents:
-* [Setup](#setup)
-  * [Requirements](#requirements)
-  * [Installation](#installation)
-* [Getting started](#getting-started)
-* [Managing projects.](#projects)
-  * [Create a new project.](#create-project)
-  * [Get all projects.](#getall-projects)
-  * [Update project name](#update-name)
-  * [Update project description](#update-description)
-  * [Delete a project.](#delete-project)
-* [Managing tasks.](#tasks)
-  * [Create a new task](#create-task) 
-  * [Get all tasks](#getall-tasks)
-  * [Update task name](#update-name)
-  * [Update project id](#update-project_id)
-  * [Download annotations](#download-annotations)
-  * [Delete task](#delete-task)
+- [Mindkosh Python SDK](#mindkosh-python-sdk)
+  - [Table of contents:](#table-of-contents)
+  - [Setup](#setup)
+    - [Requirements](#requirements)
+    - [Installation](#installation)
+  - [Getting started](#getting-started)
+  - [Datasets](#datasets)
+    - [Create dataset](#create-dataset)
+    - [Get datasets](#get-datasets)
+    - [Get dataset files](#get-dataset-files)
+    - [Update tags](#update-tags)
+    - [Upload data](#upload-data)
+    - [Upload pointcloud data](#upload-pointcloud-data)
+    - [Upload imagefiles](#upload-imagefiles)
+    - [Delete files from dataset](#delete-files-from-dataset)
+    - [Delete dataset](#delete-dataset)
+  - [Projects](#projects)
+    - [Create project](#create-project)
+    - [Get all projects](#get-all-projects)
+    - [Update project details](#update-project-details)
+    - [Delete project](#delete-project)
+  - [Tasks](#tasks)
+    - [Create task](#create-task)
+    - [Get all tasks](#get-all-tasks)
+    - [Update task details](#update-task-details)
+    - [Download annotations](#download-annotations)
+    - [Upload annotations](#upload-annotations)
+    - [Delete task](#delete-task)
+  - [Frames](#frames)
+    - [Get frames](#get-frames)
+    - [Download frame](#download-frame)
+    - [Show frame annotations](#show-frame-annotations)
+    - [Download frame annotations](#download-frame-annotations)
+    - [Visualize frame annotations](#visualize-frame-annotations)
 
 
 ## Setup
@@ -40,27 +57,148 @@ Learn more about the [Mindkosh data annotation platform](https://mindkosh.com/an
 
 * Install the package
 ```sh
-python setup.py install
+pip install .
 ```
 
 
 ## Getting started
 
 ```py
-from mindkosh import Task, Project
-task_obj = Task(token)
-project_obj = Project(token)
+from mindkosh import Client, PointCloudFile, ImageFile, Label
+client = Client(token)
 ```
 
 To get started, create a Task/Project object using the token provided to you. You can also set the token
 in an environment variable(MK_TOKEN) instead of passing as a parameter to the object constructor.
 
+## Datasets
 
-## Managing projects
+### Create dataset
+```py
+client.create_dataset(name: str, data_type: str, location: str = 'ap-south-1') 
+```
+Parameters:
+* name - unique dataset name
+* data_type - image, pointcloud or video
+* location - bucket location
+
+Example:
+```py
+dataset = client.create_dataset(
+    name = 'test-1',
+    data_type = 'pointcloud'
+)
+```
+
+### Get datasets
+```py
+datasets = client.get_datasets(
+    dataset_id:int = 1,
+    storage_method = 'vk_cloud'
+)
+```
+
+### Get dataset files
+```py
+files = client.get_dataset_files(
+    dataset_id = 1,
+    max_files = 100
+)
+```
+
+### Update tags
+```py
+updated_dataset_files = client.update_tags(
+    dataset_id = 1,
+    datasetfile_ids = [1,2,3,4,5,6,8],
+    add = ['tag1','tag2'],
+    remove = ['tag2'],
+    all = False
+)
+```
+
+### Upload data
+
+Uploads images from a list of directories or/and files.
+Useful when all the images same tags/extra.
+
+```py
+client.upload_data(
+    dataset_id = 1,
+    tags = ['tag4'],
+    resources = ['/home/user/Desktop/my-images/', '/home/user/Downloads/test1.jpg'],
+    recursive = False,
+    manifest_file = None,
+    save_files_dir = None,
+    **kwargs
+)
+```
+
+### Upload pointcloud data
+
+Uploads images from a list of directories or/and files.
+Useful when all the images same tags/extra.
+
+```py
+pcdfile1 = PointCloudFile(filepath = '/file/path1/',
+    related_files = [ImageFile(filepath='/path/to/image1', tags=[], extra={{"intrinsic": [100,30,200,12]}),
+        ImageFile(filepath='path/to/image2', tags=['left'], extra={'device_id':1})
+    ],
+    tags = [], 
+    extra = {}
+)
+
+pcdfile2 = PointCloudFile(filepath = '/file/path2/',
+    related_files = [ImageFile(filepath='/path/to/image3', tags=['right'], extra={'device_id':2}),
+        ImageFile(filepath='path/to/image4', tags=[], extra={})
+    ],
+    tags = [], 
+    extra = {}
+)
+
+client.upload_pointcloud_data(
+    dataset_id = 1,
+    pcdfiles = [pcdfile1, pcdfile2]
+    **kwargs
+)
+```
+
+### Upload imagefiles
+
+Uploads images with tags/extra for each image
+
+```py
+client.upload_imagefiles(
+    dataset_id = 1,
+    imagefiles = [ImageFile(filepath='/path/to/image1', tags=[], extra={}), ImageFile(filepath='path/to/image2')]
+)
+```
+
+### Delete files from dataset
+
+Delete select files or delete all the files from a dataset
+
+```py
+client.delete_files_from_dataset(
+    dataset_id = 1,
+    file_ids = [1,2,3,4],
+    delete_all = False
+)
+```
+
+### Delete dataset
+
+Delete a dataset along with its files
+
+```py
+client.delete_dataset(dataset_id=1)
+```
+
+## Projects
 
 ### Create project
 ```py
-project_obj.create(name, description=None) 
+project = client.project.create(name, description=None) 
 ```
 To create a project, enter a name and an optional description.
 
@@ -68,87 +206,158 @@ To create a project, enter a name and an optional description.
 
 ### Get all projects
 
+Get list of all project objects
 ```py
-myprojects = project_obj.get()
-
-for i in myprojects:  
-    print(myprojects[i].id, myprojects[i].name)
-
-for i in myprojects:  
-    print(myprojects[i])
+myprojects = client.project.get()
 ```
 
 
 ### Update project details
 
 ```py
-p1.update_name("new name")
-p1.update_description("New description")
+project.update_name("new name")
+project.update_description("New description")
 ```
 
 ### Delete project
 ```py
-p1.delete()
+project.delete()
 ```
 
-## Managing Tasks
+## Tasks
 
 ### Create task
 Create a new task :
 ```py
-task_obj.create( name, labels, resources, segment_size=0,category="imageset")
+labels = [
+    Label(
+      name='l1',
+      color='#fffccc',
+      extra={'width':2,'height':2,'length':2}
+    ),
+    Label(
+      name='l2',
+      color='#fcf0fc'
+      attributes =[]
+    )
+]
 ```
+Note : Each label should have a unique name.
+
+```py
+task = client.task.create( 
+    name='task1',
+    labels=labels,
+    dataset_id=1,
+    tags=['tag1'],
+    project_id=None,
+    job_modes=['validation','qc']
+    batches=3
+)
+```
+To create a task and upload images/video, user must provide either `resources`/`manifest`.
 
 Parameters:
-* labels - A list of labels for the annotation task. eg: 
-```py
-labels = [{"name":"label1","color":"#fff000"},{"name":"label2","color":"#fffccc"}]
-```
-* segment_size - Number of images in each job. Only valid for resource_type="imageset"
-* resources - A list of images or directories containing images. You can also use wildcards to select certain types of files.
+* name - A valid task name.
+* batches - Number of images in each job. Only valid for resource_type="imageset".
 * project_id - Optional - ID of the project this task should belong to.
-* category - "imageset" for images or "video" for video.
 
 
 ### Get all tasks
 
+Get list of all the tasks
 ```py
-mytasks = task_obj.get()
-
-for i in mytasks:  
-    print(mytasks[i].id, mytasks[i].name)
-
-for i in mytasks:  
-    print(mytasks[i])
+mytasks = client.task.get()
 ```
 
 
 ### Update task details
 
 ```py
-t1 = mytasks[1] # task_id : 1
-t1.update_name("New name")
-t1.update_project_id(new_valid_project_id)  
+task.update_name("New name")
+task.update_project_id(new_valid_project_id)  
 ```
 
 ### Download annotations
 
+Get releases
 ```py
-t1.download_annotations(fileformat="coco", filename="id_fileformat.zip", location=None)
+releases = task.get_releases()
 ```
 
-location should be the directory where you want to download annotations, filename should be the name of your annotations file (default location and filename is your current directory and "id_fileformat.zip"). fileformat can be any of the following:
+Create a release
+
+```py
+releases = task.create_release(format="coco", batches=[1,2], description=None, webhook_url=None)
+```
+
+format can be any of the following:
 
 * Available formats and their parameter names:
 * COCO - "coco"
-* Datumaro - "datumaro
-* Pascal VOC - "pascal_voc
+* Datumaro - "datumaro"
+* Pascal VOC - "voc"
 * Segmentation mask - "segmentation_mask"
 * YOLO - "yolo"
+
+Download a release
+```py
+task.download_release(release_id=1, local_path='/local/dir/')
+```
+
+Delete a release
+```py
+task.delete_release(release_id=1)
+```
+
+### Upload annotations
+
+```py
+task.upload_annotations(
+    annotation_format='coco',
+    local_path='annotation_file.zip'
+) 
+```
 
 
 ### Delete task
 Delete a task - 
 ```py
-t1.delete()
+task.delete()
 ```
+
+## Frames
+
+### Get frames
+```py
+frames = t1.frames()
+frame = frames[frame_id]
+```
+
+### Download frame
+```py
+frame.download(location)
+```
+
+### Show frame annotations
+```py
+frame.annotations
+```
+
+### Download frame annotations
+```py
+frame.download_annotations(location,format=None)
+```
+Parameters :
+
+* location - local dir location where you want to save annotations
+* format - None if you want to download row annotations. Any of ("coco", "datumaro", "voc", "yolo") if you want to download datasets in specific format.
+
+### Visualize frame annotations
+```py
+frame.visualize(show_annotations=True,fill_color=0.30)
+```
+Parameters :
+
+* show_annotations - False to see raw image, True to see image with annotations.
+* fill_color - 0 <= Color transparency <= 1

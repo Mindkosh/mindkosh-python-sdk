@@ -1,5 +1,6 @@
-# Copyright (C) 2022 Mindkosh Technologies. All rights reserved.
-
-from .core import MINDKOSH_API_V1
-from .project import Project
-from .task import Task
+# Copyright (C) 2023 Mindkosh Technologies. All rights reserved.
+__version__ = "1.1.1"
+from .core import CoreAPI
+from .client import Client, PointCloudFile, ImageFile
+from .testset import TestSet
+from .label import Label

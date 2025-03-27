@@ -1,27 +1,29 @@
 import os
 import string
 import random
-from mindkosh import Project
-  
+from mindkosh import Client
+
 N = 4
 
-random_projectname = ''.join( random.choices(string.ascii_uppercase + string.digits, k = N) )
-project_object = Project()
+random_projectname = ''.join(random.choices(
+    string.ascii_uppercase + string.digits, k=N))
+client = Client()
 
-new_project = project_object.create(
-                    "test_project_" + random_projectname,
-                    "This is an example description"
-                )
+new_project = client.project.create(
+    "test_project_" + random_projectname,
+    "This is an example description"
+)
 
-project_list = project_object.get()
+project_list = client.project.get()  # return list of project objects
 
-# Get project IDS 
-keys = list(project_list.keys())
-print( keys )
+# Get project IDS
+keys = [project.id for project in project_list]
+print(keys)
 
-# Get a task
-example_project = project_list[keys[0]]
-print( example_project.name )
+# Get project tasks
+example_project = client.project.get(project_id=new_project.project_id)
+print(example_project.tasks)
 
-# Update name of the task
-example_project.update_name( "New name - " + example_project.name )
+
+# Update name of the project
+example_project.update_name("New name - " + example_project.name)
