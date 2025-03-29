@@ -32,6 +32,7 @@ from .exceptions import InvalidTagError, InvalidLabelError
 
 logger = logging.getLogger(__name__)
 
+
 class DatasetFile:
     def __init__(self, id, original_name, size, meta_data, tags, **kwargs):
         self.id = id
@@ -43,6 +44,7 @@ class DatasetFile:
 
     def __repr__(self):
         return self.name
+
 
 class Frame:
 
@@ -184,7 +186,7 @@ class Frame:
             tool_type = shape["type"]
             if not tool_type:
                 continue
-                # return plt.show()
+
             points = shape["points"]
             edgecolor = "w"
             for label in self.labels:
@@ -663,8 +665,8 @@ class Task:
 
         Returns :  label object
         """
-        if not isinstance(label, Label):
-            raise InvalidLabelError()
+        if type(label).__name__ != "Label":
+            raise InvalidLabelError('invalid label')
 
         Label.verify(label)
         Attribute.verify(label.attributes)
@@ -678,8 +680,12 @@ class Task:
             response = self.client.session.patch(
                 task_url, json=payload)
             response.raise_for_status()
-            print('label updated')
-            return label
+            labels = response.json()['labels']
+            for l in labels:
+                if l['name'] == label.name:
+                    print('label updated')
+                    return Label(**l)
+            raise Exception('Could not add/update label')
 
         except requests.exceptions.RequestException as e:
             raise e

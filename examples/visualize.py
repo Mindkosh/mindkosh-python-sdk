@@ -1,6 +1,6 @@
 from mindkosh import Client, TestSet
 
-client = Client()
+client = Client(token='')
 testset = TestSet()
 
 task_id = 1

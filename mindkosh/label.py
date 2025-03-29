@@ -8,10 +8,10 @@ from .exceptions import InvalidLabelError
 class Label:
     def __init__(
         self,
-        name :str,
-        color : str,
-        sequence : int = None,
-        extra : dict = {},
+        name: str,
+        color: str,
+        sequence: int = None,
+        extra: dict = {},
         **kwargs
     ):
         self.name = name
@@ -20,16 +20,16 @@ class Label:
         self.sequence = sequence
         self.track = kwargs.get('track', False)
         self.lock_dimensions = kwargs.get('lock_dimensions', False)
-        
+
         if 'id' in kwargs:
             self.id = kwargs['id']
         if 'attributes' in kwargs:
             attributes = kwargs['attributes']
-            attributes = [attributes] if not isinstance(attributes,(list,tuple)) else attributes
+            attributes = [attributes] if not isinstance(
+                attributes, (list, tuple)) else attributes
             self.attributes = [Attribute(attr) for attr in attributes]
         else:
             self.attributes = []
-
 
     def __str__(self):
         return str(self.__dict__)
@@ -46,19 +46,20 @@ class Label:
 
     @staticmethod
     def verify(labels):
-        if not isinstance(labels,list):
+        if not isinstance(labels, list):
             labels = [labels]
         names = []
         sequence_set = []
         for label in labels:
             errors = []
-            #verify extra
-            required_keys = ('width','height','length')
+            # verify extra
+            required_keys = ('width', 'height', 'length')
             for key in required_keys:
                 if key not in label.extra:
                     label.extra[key] = 1
-                elif not isinstance(label.extra[key],int) or not 0 < label.extra[key] < 100:
-                    errors.append(f"\nInvalid label {key} : {label.extra[key]}.")
+                elif not isinstance(label.extra[key], int) or not 0 < label.extra[key] < 100:
+                    errors.append(
+                        f"\nInvalid label {key} : {label.extra[key]}.")
 
             # Check name  and  sequence
             if label.name in names:
@@ -66,13 +67,16 @@ class Label:
             if not isinstance(label.sequence, int) or label.sequence < 0:
                 errors.append(f"sequence value must be a positive integer.")
             if label.sequence in sequence_set:
-                errors.append(f"label sequence '{label.sequence}' is not unique.")
+                errors.append(
+                    f"label sequence '{label.sequence}' is not unique.")
 
             if not (isinstance(label.track, bool) and isinstance(label.lock_dimensions, bool)):
-                errors.append(f"track and lock_dimensions values should be type of boolean")
+                errors.append(
+                    f"track and lock_dimensions values should be type of boolean")
 
             if errors:
-                raise InvalidLabelError(f"Invalid label: {label.name}. Message: {' '.join(errors)}")
+                raise InvalidLabelError(
+                    f"Invalid label: {label.name}. Message: {' '.join(errors)}")
             # check color
             Label.verify_color(label)
 
@@ -98,7 +102,6 @@ class Attribute:
 
     def __repr__(self) -> str:
         return self.name
-    
 
     @staticmethod
     def verify(attributes):
@@ -109,20 +112,23 @@ class Attribute:
             if not name:
                 raise InvalidLabelError('attribute name is required')
             if name in names:
-                raise InvalidLabelError("attribute names for a label should be unique")
+                raise InvalidLabelError(
+                    "attribute names for a label should be unique")
             if not isinstance(att.sequence, int) or att.sequence < 0:
-                raise InvalidLabelError(f"sequence value must be a positive integer.")
+                raise InvalidLabelError(
+                    f"sequence value must be a positive integer.")
             if att.sequence in sequence_set:
-                raise InvalidLabelError(f"attribute sequence '{att.sequence}' is not unique.")
-            
+                raise InvalidLabelError(
+                    f"attribute sequence '{att.sequence}' is not unique.")
+
             error_msg = None
-            if not isinstance(att.mutable,bool):
+            if not isinstance(att.mutable, bool):
                 error_msg = 'boolean value required for attr mutable'
-            elif not att.input_type in ('checkbox','text','number','select','radio'):
+            elif not att.input_type in ('checkbox', 'text', 'number', 'select', 'radio'):
                 error_msg = 'invalid input_type for attribute'
-            elif not isinstance(att.values,(list,tuple)):
+            elif not isinstance(att.values, (list, tuple)):
                 error_msg = 'list/tuple is required for attr values'
-            elif not all(isinstance(value,str) for value in att.values):
+            elif not all(isinstance(value, str) for value in att.values):
                 error_msg = 'all values should be string type'
 
             if error_msg:

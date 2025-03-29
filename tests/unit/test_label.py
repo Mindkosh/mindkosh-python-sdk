@@ -1,5 +1,5 @@
 import pytest
-from ...mindkosh import exceptions
+from mindkosh import exceptions
 
 
 def test_duplicate_label(Label):

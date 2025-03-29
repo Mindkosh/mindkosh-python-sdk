@@ -5,7 +5,6 @@ class Segment:
     def __init__(self):
         pass
 
-
 class Job:
     def __init__(self, url, id, assignee, reviewer, status, time_spent, last_frame):
         self.url = url

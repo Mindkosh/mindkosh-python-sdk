@@ -4,7 +4,7 @@ import random
 import string
 import dotenv
 
-from ...sdk import mindkosh
+import mindkosh
 
 dotenv.load_dotenv()
 
@@ -32,13 +32,16 @@ def Label():
 def TestSet():
     return mindkosh.TestSet
 
+
 @pytest.fixture
 def PointCloudFile():
     return mindkosh.PointCloudFile
 
+
 @pytest.fixture
 def RelatedFile():
     return mindkosh.RelatedFile
+
 
 @pytest.fixture
 def random_str():

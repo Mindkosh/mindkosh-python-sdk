@@ -1,5 +1,5 @@
 import os
-from ...mindkosh.job import Job
+from mindkosh.job import Job
 
 def test_segment_and_job(client,Label,random_str):
     resourceDir = '../assets/images/' 

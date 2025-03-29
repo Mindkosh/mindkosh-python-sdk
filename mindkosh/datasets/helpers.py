@@ -11,11 +11,11 @@ from .utils import verify_filename, crop_image, rotate_image
 
 
 class DatasetFile:
-    def __init__(self, data_type, filepath: str, tags: list = [], related_files: list=[], extra: dict = {} ) -> None:
+    def __init__(self, data_type, filepath: str, tags: list = [], related_files: list = [], extra: dict = {}) -> None:
         self.filepath = verify_resources([filepath], False, data_type)[0]
-        self.tags = tags if len(tags)>0 else None
-        self.related_files = related_files if len(related_files)>0 else None
-        self.extra = extra if len(extra.keys())>0 else None
+        self.tags = tags if len(tags) > 0 else None
+        self.related_files = related_files if len(related_files) > 0 else None
+        self.extra = extra if len(extra.keys()) > 0 else None
 
 
 def verify_resources(resources, recursive, category):
@@ -41,19 +41,19 @@ def verify_resources(resources, recursive, category):
     def _verify_single_file(file):
         temp = glob.glob(verify_filename(resource))
         if not temp:
-            raise FileNotFoundError(file)          
+            raise FileNotFoundError(file)
 
     for resource in resources:
         resource = os.path.abspath(resource)
         if recursive == True:
             if os.path.isdir(resource):
                 files.extend([verify_filename(y) for x in os.walk(resource)
-                          for y in glob.glob(os.path.join(x[0], '*.png'))
-                          + glob.glob(os.path.join(x[0], '*.jpg'))
-                          + glob.glob(os.path.join(x[0], '*.jpeg'))
-                          + glob.glob(os.path.join(x[0], '*.tiff'))
-                        ])
-                          
+                              for y in glob.glob(os.path.join(x[0], '*.png'))
+                              + glob.glob(os.path.join(x[0], '*.jpg'))
+                              + glob.glob(os.path.join(x[0], '*.jpeg'))
+                              + glob.glob(os.path.join(x[0], '*.tiff'))
+                              ])
+
             else:
                 _verify_single_file(resource)
                 files.append(resource)
@@ -76,9 +76,9 @@ def image_transformations(save_files_dir, imagepath, keys, crop, rotate):
 
     valid_transformations = {"crop", "rotate"}
     crop_rotate_func_mapping = {
-            "crop" : crop_image,
-            "rotate" : rotate_image
-        }
+        "crop": crop_image,
+        "rotate": rotate_image
+    }
 
     if len(keys) == 1:
         return imagepath
@@ -96,7 +96,7 @@ def image_transformations(save_files_dir, imagepath, keys, crop, rotate):
         # crop/rotate in same order as mentioned in manifest file
 
         t1, t2 = keys[1], keys[2]
-        if not {t1,t2}==valid_transformations:
+        if not {t1, t2} == valid_transformations:
             raise Exception("Invalid Image Transformations for a folder")
         img = Image.open(imagepath)
 
@@ -106,12 +106,11 @@ def image_transformations(save_files_dir, imagepath, keys, crop, rotate):
         imageobject = crop_rotate_func_mapping[t2](
             imagepath, imageobject, crop, rotate
         )
-        
-    new_imagepath = os.path.join(save_files_dir,os.path.basename(imagepath))
+
+    new_imagepath = os.path.join(save_files_dir, os.path.basename(imagepath))
     imageobject.save(new_imagepath)
 
     return new_imagepath
-
 
 
 def verify_manifest(manifest, save_files_dir, dataset_id, category):
@@ -121,7 +120,7 @@ def verify_manifest(manifest, save_files_dir, dataset_id, category):
     save_files_dir_temp = tempfile.mkdtemp(prefix=f'dataset_id_{dataset_id}_')
     manifest = os.path.abspath(manifest)
     files = []
-    if category.lower()!='image':
+    if category.lower() != 'image':
         raise Exception("Invalid dataset category for manifest file")
     try:
         f = open(manifest)
@@ -132,8 +131,6 @@ def verify_manifest(manifest, save_files_dir, dataset_id, category):
         raise Exception(
             f"'couldn't find 'images or/and folders' in '{manifest}'")
 
-    #logger.warning(" Applying Image Transformations...")
-
     if "images" in data:
         images = data["images"]
         with alive_bar(len(images), dual_line=True, title=f'\033[1m Files \033[0m') as bar:
@@ -141,7 +138,7 @@ def verify_manifest(manifest, save_files_dir, dataset_id, category):
 
                 keys = list(image.keys())
 
-                if len(keys) not in (1,2,3) or keys[0] != "path":
+                if len(keys) not in (1, 2, 3) or keys[0] != "path":
                     raise Exception("invalid manifest file format")
                 imagepath = verify_filename(image["path"])
                 bar.text = f'-> cropping/rotating the image: {imagepath}'
@@ -163,18 +160,18 @@ def verify_manifest(manifest, save_files_dir, dataset_id, category):
     if "folders" in data:
         for folder in data["folders"]:
             keys = list(folder.keys())
-            if keys[0] != "path" or len(keys) not in (1,2,3):
+            if keys[0] != "path" or len(keys) not in (1, 2, 3):
                 raise Exception(f"invalid manifest file folder")
             resource = folder["path"]
 
             basename = os.path.basename(os.path.normpath(resource))
-            new_save_files_dir = os.path.join(save_files_dir_temp,basename)
+            new_save_files_dir = os.path.join(save_files_dir_temp, basename)
             if not os.path.exists(new_save_files_dir):
                 os.makedirs(new_save_files_dir)
 
             images = []
             images.extend([verify_filename(os.path.join(resource, i)) for i in os.listdir(resource)
-                       if i.endswith(('.jpg', '.png', '.jpeg'))])
+                           if i.endswith(('.jpg', '.png', '.jpeg'))])
             crop = folder["crop"] if "crop" in folder else None
             rotate = folder["rotate"] if "rotate" in folder else None
 
@@ -183,17 +180,17 @@ def verify_manifest(manifest, save_files_dir, dataset_id, category):
                     bar.text = f'-> cropping/rotating the image: {imagepath}'
 
                     transformed_file = image_transformations(
-                    new_save_files_dir,
-                    imagepath,
-                    keys,
-                    crop,
-                    rotate
-                )
+                        new_save_files_dir,
+                        imagepath,
+                        keys,
+                        crop,
+                        rotate
+                    )
                     files.append(transformed_file)
 
                     bar()
 
             print("\n")
     if save_files_dir:
-        shutil.move(save_files_dir_temp,save_files_dir)
+        shutil.move(save_files_dir_temp, save_files_dir)
     return files

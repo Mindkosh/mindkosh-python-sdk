@@ -1,7 +1,7 @@
 
 import pytest
 
-from ...mindkosh import Client, exceptions
+from mindkosh import Client, exceptions
 
 
 class TestSDKToken:

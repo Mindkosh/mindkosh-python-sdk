@@ -1,6 +1,6 @@
 from mindkosh import Client, Label
 
-client = Client()
+client = Client(token='')
 
 task_id = 1
 task = client.task.get(task_id)
@@ -8,10 +8,10 @@ task = client.task.get(task_id)
 new_label = Label(
     name = 'new label',
     color = '#fffccc',
-    sequence = 10, # sequence values should be unique for all the labels of a task.
+    sequence = 1, # sequence values should be unique for all the labels of a task.
     attributes = [
         {
-            'name' : 'a1',
+            'name' : 'property1',
             'input_type' : 'checkbox',
             'default_value' : True,
             'mutable' : False,
@@ -20,7 +20,7 @@ new_label = Label(
         },
 
         {
-            'name' : 'a2',
+            'name' : 'property2',
             'input_type' : 'radio',
             'default_value' : 'some value',
             'mutable' : True,

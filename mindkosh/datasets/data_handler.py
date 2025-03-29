@@ -17,12 +17,13 @@ from .helpers import DatasetFile
 
 logger = logging.getLogger(__name__)
 
-def skip_dataset_error(data_type,message):
+
+def skip_dataset_error(data_type, message):
     # in case of pointcloud dataset we would need the prefixed name of already-uploaded file
-    if data_type=='image' and 'filename' in message:
-        #logger.warning('Duplicate file skipped')
+    if data_type == 'image' and 'filename' in message:
         return True
     return False
+
 
 class DataSetUploader:
     def __init__(
@@ -32,7 +33,7 @@ class DataSetUploader:
         file_upload_url,
         stream_url,
         headers,
-        data_type = 'image'
+        data_type='image'
     ):
 
         self.dataset_id = dataset_id
@@ -48,13 +49,13 @@ class DataSetUploader:
         self,
         datasetfile: Union[str, DatasetFile],
         tags: list,
-        convert_tiff_to:str ='.png',
+        convert_tiff_to: str = '.png',
         extra: dict = {},
         **kwargs
     ):
-        
+
         filepath = datasetfile
-        if(type(datasetfile).__name__ == "DatasetFile"):
+        if (type(datasetfile).__name__ == "DatasetFile"):
             filepath = datasetfile.filepath
 
         base_name = os.path.basename(filepath)
@@ -80,12 +81,12 @@ class DataSetUploader:
             }
         }
 
-        if(type(datasetfile).__name__ == "DatasetFile"):
-            if(datasetfile.tags):
+        if (type(datasetfile).__name__ == "DatasetFile"):
+            if (datasetfile.tags):
                 data['meta_data']['tags'] = datasetfile.tags
-            if(datasetfile.extra):
+            if (datasetfile.extra):
                 data['meta_data']['extra'] = datasetfile.extra
-            if(datasetfile.related_files):
+            if (datasetfile.related_files):
                 data['meta_data']['related_files'] = datasetfile.related_files
         else:
             if tags:
@@ -127,7 +128,7 @@ class DataSetUploader:
             - Uploading images with extra and tags for image datasets.
             - Uploading related files of a pcd file.
         """
-        
+
         filepath = imagefile.filepath
         base_name = os.path.basename(filepath)
         byte_im = open(filepath, 'rb').read()
@@ -146,7 +147,7 @@ class DataSetUploader:
             data['meta_data']['tags'] = imagefile.tags
         if imagefile.extra:
             data['meta_data']['extra'] = imagefile.extra
-        
+
         resp = requests.post(url=self.file_upload_url,
                              json=data, headers=self.headers)
         if resp.status_code == requests.codes.bad_request:
@@ -242,8 +243,8 @@ class DataSetUploader:
 
     async def _stream_status(self, num_of_files):
         async with aiohttp.ClientSession() as session:
-            self.heartbeat_event = asyncio.Event()
-            heartbeat_task = asyncio.create_task(self.send_heartbeat(session))
+            # self.heartbeat_event = asyncio.Event()
+            # heartbeat_task = asyncio.create_task(self.send_heartbeat(session))
             async with session.get(self.stream_url, headers=self.headers, timeout=None) as response:
                 while num_of_files > self._finished + self._skipped:
                     try:
@@ -253,16 +254,25 @@ class DataSetUploader:
                         if line["status"] == "finished":
                             self._finished += len(line["files"])
                         if self.event.is_set():
-                            extracted = format(((self._finished + self._skipped)/num_of_files)*100,'.2f')
+                            extracted = format(
+                                ((self._finished + self._skipped)/num_of_files)*100, '.2f')
                             print(f"Processing... : {extracted}%", end="\r")
+
+                    except json.JSONDecodeError:
+                        lines = line.replace('data: ', '').split('\n')
+                        for line in lines:
+                            if line and line[0] == '{':
+                                line = json.loads(line)
+                                if line["status"] == "finished":
+                                    self._finished += len(line["files"])
+
                     except asyncio.TimeoutError:
                         break
-                    except json.JSONDecodeError:
-                        pass
                     except aiohttp.EofStream as e:
                         raise e
-                self.heartbeat_event.set()
-                await heartbeat_task
+                time.sleep(1)
+                # self.heartbeat_event.set()
+                # await heartbeat_task
 
     def files_upload_thread(self, raw_filepaths=None, imagefiles=None, pcdfiles=None, tags=[], extra={}):
         if raw_filepaths:
@@ -273,28 +283,30 @@ class DataSetUploader:
             bulk_uploader = self._upload_fileobjects
             if imagefiles:
                 uploader = self._upload_single_imagefile
-                files_to_upload = imagefiles 
+                files_to_upload = imagefiles
             elif pcdfiles:
                 uploader = self._upload_single_pcd_file
                 files_to_upload = pcdfiles
             else:
                 raise Exception('No data to upload')
-        
+
         num_of_files = len(files_to_upload)
-        self._finished, self._skipped  = 0, 0
+        self._finished, self._skipped = 0, 0
         try:
             status_thread = threading.Thread(target=asyncio.run, args=(
-                self._stream_status(num_of_files,),),daemon=True)
+                self._stream_status(num_of_files,),), daemon=True)
             status_thread.start()
 
             time.sleep(0.1)
-            upload_files_thread = threading.Thread(bulk_uploader(files_to_upload,uploader,tags,extra),daemon=False)
+            upload_files_thread = threading.Thread(bulk_uploader(
+                files_to_upload, uploader, tags, extra), daemon=False)
             upload_files_thread.start()
             status_thread.join()
         except Exception as e:
             raise e
 
-        print(f"Files skipped: {self._skipped}. Files uploaded: {self._finished}")
+        print(
+            f"Files skipped: {self._skipped}. Files uploaded: {self._finished}")
         return self._finished
 
 

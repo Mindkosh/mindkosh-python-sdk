@@ -1,47 +1,44 @@
-# Mindkosh Python SDK
 
-The Mindkosh Python SDK offers a simple, user-friendly way to interact with the Mindkosh data annotation platform.
+[Mindkosh](https://mindkosh.com/annotation-platform) is the platform for 
+labeling multi-sensor data, from Lidar point clouds to multiple camera images. Our powerful automatic annotation features and a particular focus on making Quality checking easier and faster, helps ML teams obtain high quality labeled datasets at scale.
 
-Easily manage large Data labeling projects and the teams that work on them. All while using a feature-rich Annotation tool.
-Learn more about the [Mindkosh data annotation platform](https://mindkosh.com/annotation-platform)
 
 [Read documentation here](https://docs.mindkosh.com/getting-started/welcome)
 
 ## Table of contents:
-- [Mindkosh Python SDK](#mindkosh-python-sdk)
-  - [Table of contents:](#table-of-contents)
-  - [Setup](#setup)
-    - [Requirements](#requirements)
-    - [Installation](#installation)
-  - [Getting started](#getting-started)
-  - [Datasets](#datasets)
-    - [Create dataset](#create-dataset)
-    - [Get datasets](#get-datasets)
-    - [Get dataset files](#get-dataset-files)
-    - [Update tags](#update-tags)
-    - [Upload data](#upload-data)
-    - [Upload pointcloud data](#upload-pointcloud-data)
-    - [Upload imagefiles](#upload-imagefiles)
-    - [Delete files from dataset](#delete-files-from-dataset)
-    - [Delete dataset](#delete-dataset)
-  - [Projects](#projects)
-    - [Create project](#create-project)
-    - [Get all projects](#get-all-projects)
-    - [Update project details](#update-project-details)
-    - [Delete project](#delete-project)
-  - [Tasks](#tasks)
-    - [Create task](#create-task)
-    - [Get all tasks](#get-all-tasks)
-    - [Update task details](#update-task-details)
-    - [Download annotations](#download-annotations)
-    - [Upload annotations](#upload-annotations)
-    - [Delete task](#delete-task)
-  - [Frames](#frames)
-    - [Get frames](#get-frames)
-    - [Download frame](#download-frame)
-    - [Show frame annotations](#show-frame-annotations)
-    - [Download frame annotations](#download-frame-annotations)
-    - [Visualize frame annotations](#visualize-frame-annotations)
+- [Table of contents:](#table-of-contents)
+- [Setup](#setup)
+  - [Requirements](#requirements)
+  - [Installation](#installation)
+- [Getting started](#getting-started)
+- [Datasets](#datasets)
+  - [Create dataset](#create-dataset)
+  - [Get datasets](#get-datasets)
+  - [Get dataset files](#get-dataset-files)
+  - [Update tags](#update-tags)
+  - [Upload data](#upload-data)
+  - [Upload pointcloud data](#upload-pointcloud-data)
+  - [Upload imagefiles](#upload-imagefiles)
+  - [Delete files from dataset](#delete-files-from-dataset)
+  - [Delete dataset](#delete-dataset)
+- [Projects](#projects)
+  - [Create project](#create-project)
+  - [Get all projects](#get-all-projects)
+  - [Update project details](#update-project-details)
+  - [Delete project](#delete-project)
+- [Tasks](#tasks)
+  - [Create task](#create-task)
+  - [Get all tasks](#get-all-tasks)
+  - [Update task details](#update-task-details)
+  - [Download annotations](#download-annotations)
+  - [Upload annotations](#upload-annotations)
+  - [Delete task](#delete-task)
+- [Frames](#frames)
+  - [Get frames](#get-frames)
+  - [Download frame](#download-frame)
+  - [Show frame annotations](#show-frame-annotations)
+  - [Download frame annotations](#download-frame-annotations)
+  - [Visualize frame annotations](#visualize-frame-annotations)
 
 
 ## Setup
@@ -50,7 +47,7 @@ Learn more about the [Mindkosh data annotation platform](https://mindkosh.com/an
 
 * Python >= 3.7
 * Account on the Mindkosh platform (Create on now)
-* SDK Token (contact us for getting one)
+* SDK Token (contact us to get one)
 
 
 ### Installation
@@ -75,12 +72,14 @@ in an environment variable(MK_TOKEN) instead of passing as a parameter to the ob
 
 ### Create dataset
 ```py
-client.create_dataset(name: str, data_type: str, location: str = 'ap-south-1') 
+client.create_dataset(
+    name: str, 
+    data_type: str
+) 
 ```
 Parameters:
 * name - unique dataset name
 * data_type - image, pointcloud or video
-* location - bucket location
 
 Example:
 ```py
@@ -93,8 +92,7 @@ dataset = client.create_dataset(
 ### Get datasets
 ```py
 datasets = client.get_datasets(
-    dataset_id:int = 1,
-    storage_method = 'vk_cloud'
+    dataset_id = 1
 )
 ```
 
@@ -140,20 +138,30 @@ Uploads images from a list of directories or/and files.
 Useful when all the images same tags/extra.
 
 ```py
-pcdfile1 = PointCloudFile(filepath = '/file/path1/',
-    related_files = [ImageFile(filepath='/path/to/image1', tags=[], extra={{"intrinsic": [100,30,200,12]}),
-        ImageFile(filepath='path/to/image2', tags=['left'], extra={'device_id':1})
-    ],
-    tags = [], 
-    extra = {}
-)
+pcdfile1 = PointCloudFile(
+    filepath = '/file/path1/',
+    related_files = [
+        ImageFile(
+            filepath='/path/to/image1',
+            tags=[],
+            extra={
+                "intrinsic": [255.520403, 449.883682, 250.828738, 255.237477],
 
-pcdfile2 = PointCloudFile(filepath = '/file/path2/',
-    related_files = [ImageFile(filepath='/path/to/image3', tags=['right'], extra={'device_id':2}),
-        ImageFile(filepath='path/to/image4', tags=[], extra={})
-    ],
-    tags = [], 
-    extra = {}
+                # Projection matrix from lidar to camera
+                "extrinsic": [
+                    [-0.735827, -0.65789, -0.0384775, 0],
+                    [0.6567956, -0.70452916, 0.00140833, 0],
+                    [-0.02255652, -0.0248216, 0.9993586, 0],
+                    [0, 0, 0, 1]
+                ],
+
+                # Camera projection model - PINHOLE OR FISHEYE
+                # For FISHEYE, mirrorParameter is also needed
+                "cameraModel": "PINHOLE",
+                "device_id": 1
+            }
+        )
+    ]
 )
 
 client.upload_pointcloud_data(
@@ -170,7 +178,16 @@ Uploads images with tags/extra for each image
 ```py
 client.upload_imagefiles(
     dataset_id = 1,
-    imagefiles = [ImageFile(filepath='/path/to/image1', tags=[], extra={}), ImageFile(filepath='path/to/image2')]
+    imagefiles = [
+        ImageFile(
+            filepath='/path/to/image1',
+            tags=["city1"]
+        ),
+        ImageFile(
+            filepath='path/to/image2',
+            tags=["city2"]
+        )
+    ]
 )
 ```
 
@@ -231,13 +248,14 @@ Create a new task :
 ```py
 labels = [
     Label(
-      name='l1',
+      name='car',
       color='#fffccc',
-      extra={'width':2,'height':2,'length':2}
+      sequence=1
     ),
     Label(
-      name='l2',
-      color='#fcf0fc'
+      name='bus',
+      color='#fcf0fc',
+      sequence=2,
       attributes =[]
     )
 ]
@@ -288,7 +306,12 @@ releases = task.get_releases()
 Create a release
 
 ```py
-releases = task.create_release(format="coco", batches=[1,2], description=None, webhook_url=None)
+releases = task.create_release(
+    format="coco", 
+    batches=[1,2], 
+    description=None, 
+    webhook_url=None
+)
 ```
 
 format can be any of the following:
@@ -302,7 +325,10 @@ format can be any of the following:
 
 Download a release
 ```py
-task.download_release(release_id=1, local_path='/local/dir/')
+task.download_release(
+    release_id=1,
+    local_path='/local/dir/'
+)
 ```
 
 Delete a release

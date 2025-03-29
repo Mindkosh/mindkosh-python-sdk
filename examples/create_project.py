@@ -1,4 +1,3 @@
-import os
 import string
 import random
 from mindkosh import Client
@@ -7,7 +6,7 @@ N = 4
 
 random_projectname = ''.join(random.choices(
     string.ascii_uppercase + string.digits, k=N))
-client = Client()
+client = Client(token='')
 
 new_project = client.project.create(
     "test_project_" + random_projectname,

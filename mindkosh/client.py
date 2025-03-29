@@ -15,7 +15,7 @@ from .task import Task
 from .utils import DataSetProperty
 from .core import CoreAPI, APIConfig
 from .datasets.data_handler import DataSetUploader
-from .datasets.helpers import verify_manifest, verify_resources, DatasetFile
+from .datasets.helpers import verify_manifest, verify_resources
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -605,6 +605,7 @@ class Client:
             files_uploaded = uploader.files_upload_thread(imagefiles=related_imagefiles)
             uploader.event.clear()
             self._update_files_count(files_uploaded,DataSetProperty.DataType.IMAGE)
+            time.sleep(10)
 
         logger.warning(f"Uploading {len(pointcloudfiles)} pointcloud files")
         files_uploaded = uploader.files_upload_thread(pcdfiles=pointcloudfiles)

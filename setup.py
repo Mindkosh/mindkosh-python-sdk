@@ -1,4 +1,4 @@
-# Copyright (C) 2022 Mindkosh Technologies. All rights reserved.
+# Copyright (C) 2024 Mindkosh Technologies. All rights reserved.
 # Author: Shikhar Dev Gupta
 
 from setuptools import setup, find_packages
@@ -8,12 +8,12 @@ with open("README.md", "r") as fh:
 
 setup(
     name='mindkosh',
-    version='0.2.0',
+    version='1.0.1',
     description="Mindkosh Python SDK",
     long_description=long_description,
-    url='https://mindkosh.com',
+    url='https://github.com/Mindkosh/mindkosh-python-sdk',
     author="Mindkosh",
-    author_email="support@mindkosh.com",
+    author_email="shikhar@mindkosh.com",
     packages=find_packages(),
     include_package_data=True,
     python_requires='>=3.7',
@@ -30,5 +30,9 @@ setup(
         "python-dotenv==0.21.0",
         "aiohttp==3.8.3"
     ],
-    keywords=["mindkosh"],
+    keywords=[
+        "annotation",
+        "segmentation",
+        "pointcloud",
+        "computervision",],
 )

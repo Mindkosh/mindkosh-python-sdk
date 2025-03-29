@@ -1,11 +1,11 @@
 # Copyright (C) 2023 Mindkosh Technologies. All rights reserved.
 # Author: Parmeshwar Kumawat
+
 import threading
 import os
 import re
 import sys
 import json
-import requests
 from datetime import datetime
 
 import matplotlib.pyplot as plt
@@ -15,9 +15,6 @@ from matplotlib.lines import Line2D
 from matplotlib.backend_tools import ToolToggleBase
 import matplotlib.colors as colors
 import mplcursors
-
-# import open3d as o3d
-# import numpy as np
 
 from .annotations import manager
 from .task import Frame
@@ -192,8 +189,8 @@ class TestSet:
 
     def visualize(
         self,
-        show_annotations = True,
-        show_issues = False,
+        show_annotations=True,
+        show_issues=False,
         fill_color=0.3
     ):
         """Visualise all the frames added to testset.
@@ -221,22 +218,23 @@ class TestSet:
 
         plt.rcParams['figure.dpi'] = 110
         plt.rcParams['image.interpolation'] = 'none'
-        #plt.rcParams['toolbar'] = 'toolmanager'
+        # plt.rcParams['toolbar'] = 'toolmanager'
         fig, ax = plt.subplots()
-        fig.canvas.manager.toolbar.pack(side='bottom') #fill='y'
+        fig.canvas.manager.toolbar.pack(side='bottom')  # fill='y'
         self.ax = ax
         self.fig = fig
 
-        self.cursormanager = CursorConfig()       
+        self.cursormanager = CursorConfig()
         self._plot_image()
 
-        #issue_selector = issuemanager.create_selector()
-        #TODO : add toggle icon / make the click area larger
+        # issue_selector = issuemanager.create_selector()
+        # TODO : add toggle icon / make the click area larger
         # fig.canvas.manager.toolmanager.add_tool('Selector', SelectorTool, issue_selector=issue_selector)
         # fig.canvas.manager.toolbar.add_tool('Selector', 'toolitem')
         # fig.canvas.manager.toolmanager.remove_tool('forward')
         # fig.canvas.manager.toolmanager.remove_tool('back')
         self._hault = False
+
         def toggle_image(event):
             if not self._hault:
                 if event.key in ('left', 'up'):
@@ -256,8 +254,6 @@ class TestSet:
                     return
 
                 self.ax.cla()
-                #self.issuemanager.clear_selector()
-                #self.issuemanager.enable_issueButton()
                 self.cursormanager.reset()
                 self._plot_image()
                 self.cursormanager.create()
@@ -265,37 +261,33 @@ class TestSet:
                 self._hault = False
             return
 
-        def on_button_press(event): 
-            threading.Thread(target=toggle_image,args=(event,)).start()
-        
+        def on_button_press(event):
+            threading.Thread(target=toggle_image, args=(event,)).start()
+
         self.cursormanager.create()
-        plt.connect('motion_notify_event', self.cursormanager.remove_annotations)
-        fig.canvas.mpl_connect('key_press_event',on_button_press)
-        #self.issuemanager._CID = plt.connect('key_press_event', toggle_image)
-        #issuemanager.create_buttons()
-        #issuemanager.add_button_events(self.ax, self.fig, callback=toggle_image)
+        plt.connect('motion_notify_event',
+                    self.cursormanager.remove_annotations)
+        fig.canvas.mpl_connect('key_press_event', on_button_press)
         plt.connect('close_event', lambda event: self.clear())
         plt.show()
-    
+
     def _plot_image(self):
-        self.fig.canvas.set_window_title(self.frames[self._index].datasetfile.name)  #name[name._index('_') + 1 :]  
+        self.fig.canvas.set_window_title(
+            self.frames[self._index].datasetfile.name)
         self.ax.imshow(self.frames[self._index].im())
-              
+
         if self.show_annotations:
             self._plot_annotations()
-        
+
         if self.show_issues:
             self._plot_issues()
 
-        #self.issuemanager.job_id = self.frames[self._index].job_id
-        #self.issuemanager.frame_id = self.frames[self._index].frame_id
-        
         current = self._index + 1
         total = len(self.frames)
         task = self.frames[self._index].task_id
         frame = self.frames[self._index].frame_id
-        print(f"Frame ({current}/{total}) : (task_id : {task}, frame_id : {frame})")
-
+        print(
+            f"Frame ({current}/{total}) : (task_id : {task}, frame_id : {frame})")
 
     def _plot_issues(self):
         issues = self.frames[self._index].issues
@@ -304,11 +296,10 @@ class TestSet:
                 continue
             position = issue['position']
             IssueManager.plot_issue(
-                ax = self.ax,
-                position = position,
-                label = issue["name"]
+                ax=self.ax,
+                position=position,
+                label=issue["name"]
             )
-
 
     def _plot_annotations(self):
         legends = set()
@@ -398,9 +389,7 @@ class TestSet:
 
         return combined_labels, combined_images, combined_annotations
 
-
     def download_annotations(self, location, filename=None, format=None):
-
         """Downdloads annotations for all the frames added in the testset.
             - frames added in testset can be from differnt tasks.
             - Downloads raw annotations if no format is mentioned.

@@ -1,6 +1,6 @@
 import mindkosh
 
-client = mindkosh.Client()
+client = mindkosh.Client(token='')
 
 task = client.task.get(task_id=100)
 
