@@ -1,9 +1,17 @@
+![mindkosh_logo_small](https://github.com/user-attachments/assets/2ee88693-028b-436c-9061-5ab318565c52)
+
 
 [Mindkosh](https://mindkosh.com/annotation-platform) is the platform for 
 labeling multi-sensor data, from Lidar point clouds to multiple camera images. Our powerful automatic annotation features and a particular focus on making Quality checking easier and faster, helps ML teams obtain high quality labeled datasets at scale.
 
 
 [Read documentation here](https://docs.mindkosh.com/getting-started/welcome)
+
+
+![github-sdk-page-image](https://github.com/user-attachments/assets/abbe6b88-3b86-4557-be87-8ed778ea093e)
+
+
+
 
 ## Table of contents:
 - [Table of contents:](#table-of-contents)
