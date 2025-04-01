@@ -678,19 +678,24 @@ class PointCloudFile:
         self._size = os.path.getsize(filepath)
 
     def _validate_tags(self, tags):
-        pass
+        if not isinstance(tags,list) or len(tags)>10:
+            raise DatasetFileError('tags: a list(max length 10) of items is required')
 
     def _validate_related_files(self, related_files):
         if len(related_files) > 20:
-            raise DatasetFileError('Max 20 related files allowed for a pointcloud file')
+            raise DatasetFileError('Max 20 related files allowed for a pointcloud file')    
+        device_ids = []
         for related_file in related_files:
             if type(related_file).__name__ != "ImageFile":
-                raise DatasetFileError('invalid related file object')
+                raise DatasetFileError('invalid related file object')  
+              
+            device_id = related_file.extra.get('device_id', None)
+            if not device_id or not isinstance(device_id, int) or device_id < 0:
+                raise DatasetFileError('Related file requires a positive integer value as device_id')
+            if device_id in device_ids:
+                raise DatasetFileError('device_id must be unique for each relatedfiles of a pointcloud')
             
-            if 'device_id' not in related_file.extra:
-                raise DatasetFileError('device_id is required for a related file')
-            if not isinstance(related_file.extra['device_id'],int) or related_file.extra['device_id']<0:
-                raise DatasetFileError('Invalid device_id')
+            device_ids.append(device_id)
 
 
 class ImageFile:
@@ -701,8 +706,8 @@ class ImageFile:
         if extension not in ('.jpg', '.png', '.jpeg'):
             raise DatasetFileError(f"'{extension}' files are not supported")
         
-        if not isinstance(tags,list):
-            raise DatasetFileError('tags: a list of items is required')
+        if not isinstance(tags,list) or len(tags)>10:
+            raise DatasetFileError('tags: a list(max length 10) of items is required')
             
         self.filepath = filepath
         self.tags = tags
