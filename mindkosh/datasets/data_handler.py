@@ -151,10 +151,10 @@ class DataSetUploader:
         resp = requests.post(url=self.file_upload_url,
                              json=data, headers=self.headers)
         if resp.status_code == requests.codes.bad_request:
-            if skip_dataset_error(self._data_type, resp.text):
-                self._skipped += 1
-                self._sequence += 1
-                return
+            # if skip_dataset_error(self._data_type, resp.text):
+            #     self._skipped += 1
+            #     self._sequence += 1
+            #     return
             raise Exception(resp.text)
         resp.raise_for_status()
         resp_json = resp.json()
@@ -162,8 +162,7 @@ class DataSetUploader:
 
         presigned_url = resp_json['url']
         fields = resp_json['fields']
-        if self._data_type == 'pointcloud':
-            imagefile.prefixed_filename = fields['key'].split('/')[-1]
+        imagefile.prefixed_filename = fields['key'].split('/')[-1]
         payload = fields
 
         res = requests.post(
@@ -174,23 +173,23 @@ class DataSetUploader:
         )
         res.raise_for_status()
 
-    def _upload_single_pcd_file(self, pcdfile, **kwargs):
-        base_name = os.path.basename(pcdfile.filepath)
+    def _upload_single_base_file(self, basefile, **kwargs):
+        base_name = os.path.basename(basefile.filepath)
         data = {
             "dataset_id": self.dataset_id,
             "file_name": base_name,
-            "file_size": pcdfile._size,
+            "file_size": basefile._size,
             "meta_data": {
                 "batch_key": self.batch_key,
                 "sequence": self._sequence
             }
         }
 
-        if pcdfile.tags:
-            data['meta_data']['tags'] = pcdfile.tags
+        if basefile.tags:
+            data['meta_data']['tags'] = basefile.tags
 
         related_files = []
-        for related_file in pcdfile.related_files:
+        for related_file in basefile.related_files:
             if related_file.prefixed_filename:
                 related_files.append(related_file.prefixed_filename)
         if related_files:
@@ -212,7 +211,7 @@ class DataSetUploader:
             presigned_url,
             headers={},
             data=payload,
-            files={'file': open(pcdfile.filepath, 'rb').read()}
+            files={'file': open(basefile.filepath, 'rb').read()}
         )
         res.raise_for_status()
 
@@ -274,7 +273,7 @@ class DataSetUploader:
                 # self.heartbeat_event.set()
                 # await heartbeat_task
 
-    def files_upload_thread(self, raw_filepaths=None, imagefiles=None, pcdfiles=None, tags=[], extra={}):
+    def files_upload_thread(self, raw_filepaths=None, imagefiles=None, basefiles=None, tags=[], extra={}):
         if raw_filepaths:
             bulk_uploader = self._upload_raw_files
             uploader = self._upload_single_file
@@ -284,9 +283,9 @@ class DataSetUploader:
             if imagefiles:
                 uploader = self._upload_single_imagefile
                 files_to_upload = imagefiles
-            elif pcdfiles:
-                uploader = self._upload_single_pcd_file
-                files_to_upload = pcdfiles
+            elif basefiles:
+                uploader = self._upload_single_base_file
+                files_to_upload = basefiles
             else:
                 raise Exception('No data to upload')
 

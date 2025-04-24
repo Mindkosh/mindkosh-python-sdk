@@ -16,9 +16,9 @@ from matplotlib.backend_tools import ToolToggleBase
 import matplotlib.colors as colors
 import mplcursors
 
-from .annotations import manager
-from .task import Frame
-from .issue import Issue
+from . import manager
+from ..task import Frame
+from ..issue import Issue
 
 
 class SelectorTool(ToolToggleBase):
