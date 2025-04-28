@@ -34,7 +34,7 @@ class BaseFile:
                 raise DatasetFileError('invalid related file object')
             
             device_id = related_file._extra.get('device_id', None)
-            if not device_id or not isinstance(device_id, int) or device_id < 0:
+            if device_id is None or not isinstance(device_id, int) or device_id < 0:
                 raise DatasetFileError('Related file requires a positive integer value as device_id')
             if device_id in device_ids:
                 raise DatasetFileError(f'device_id must be unique for each relatedfiles of a BaseFile')     
