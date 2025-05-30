@@ -26,6 +26,7 @@ setup(
     author_email="shikhar@mindkosh.com",
     packages=find_packages(),
     include_package_data=True,
+    license="Apache-2.0",
     python_requires='>=3.7',
     install_requires=get_requirements(),
     keywords=[
