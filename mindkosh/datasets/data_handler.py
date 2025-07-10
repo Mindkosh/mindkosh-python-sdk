@@ -18,13 +18,6 @@ from .helpers import DatasetFile
 logger = logging.getLogger(__name__)
 
 
-def skip_dataset_error(data_type, message):
-    # in case of pointcloud dataset we would need the prefixed name of already-uploaded file
-    if data_type == 'image' and 'filename' in message:
-        return True
-    return False
-
-
 class DataSetUploader:
     def __init__(
         self,
@@ -44,6 +37,22 @@ class DataSetUploader:
         self._data_type = data_type
         self._sequence = 1
         self.event = threading.Event()
+
+    def _skip_file(self,
+        message: dict
+    ):
+        """
+        Returns prefixed filename and updates files count if the file is already uploaded.
+        Throws error for other errors
+        """
+        try:
+            prefixed_filename = message['filename'][-1]
+        except KeyError:
+            raise Exception(message)
+        self._skipped += 1
+        self._sequence += 1
+
+        return prefixed_filename
 
     def _upload_single_file(
         self,
@@ -97,11 +106,8 @@ class DataSetUploader:
         resp = requests.post(url=self.file_upload_url,
                              json=data, headers=self.headers)
         if resp.status_code == requests.codes.bad_request:
-            if skip_dataset_error(self._data_type, resp.text):
-                self._skipped += 1
-                self._sequence += 1
-                return
-            raise Exception(resp.text)
+            return self._skip_file(resp.json())
+
         resp.raise_for_status()
         resp_json = resp.json()
         self._sequence += 1
@@ -151,11 +157,11 @@ class DataSetUploader:
         resp = requests.post(url=self.file_upload_url,
                              json=data, headers=self.headers)
         if resp.status_code == requests.codes.bad_request:
-            if skip_dataset_error(self._data_type, resp.text):
-                self._skipped += 1
-                self._sequence += 1
-                return
-            raise Exception(resp.text)
+            #check and skip uploading if the file is already uploaded
+            prefixed_filename = self._skip_file(resp.json())
+            imagefile.prefixed_filename = prefixed_filename
+            return
+        
         resp.raise_for_status()
         resp_json = resp.json()
         self._sequence += 1
@@ -199,7 +205,8 @@ class DataSetUploader:
         resp = requests.post(url=self.file_upload_url,
                              json=data, headers=self.headers)
         if resp.status_code == requests.codes.bad_request:
-            raise Exception(resp.text)
+            return self._skip_file(resp.json())
+
         resp.raise_for_status()
         resp_json = resp.json()
         self._sequence += 1
