@@ -170,6 +170,7 @@ def _verify_annotations(file_path,annotation_format,labels):
 def validate_mk_datasets(file_path):
     """Returns labels present in datasets
     """
+    # FIXME: Update mindkosh validator with the latest version
     labels = set()
     supported_anno_types = ['boxes', 'polylines', 'points', 'cuboids', 'polygons', 'tags']
     def get_labels(data):

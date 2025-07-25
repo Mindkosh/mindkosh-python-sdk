@@ -41,8 +41,11 @@ class AnnotationFormats:
     @classmethod
     def validate(cls,anno_format,category,upload=False):
         available = getattr(cls,category.upper())
-        if category!='pointcloud' and upload:
-            available['cvat'] = 'CVAT 1.1'
+        if upload:
+            if category!='pointcloud':
+                available['cvat'] = 'CVAT 1.1'
+            elif category=='yolo':
+                raise Exception(f"Yolo format is not supported. You can convert it to coco using sdk and then upload")
         try:
             return available[anno_format.lower()]
         except KeyError:
