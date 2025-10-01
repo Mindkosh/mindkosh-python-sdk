@@ -663,7 +663,7 @@ class Task:
 
         :param label: `mindkosh.Label`
 
-        Returns :  label object
+        Returns :  updated label object
         """
         if type(label).__name__ != "Label":
             raise InvalidLabelError('invalid label')

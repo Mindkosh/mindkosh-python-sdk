@@ -8,6 +8,7 @@ task = client.task.get(task_id)
 new_label = Label(
     name = 'new label',
     color = '#fffccc',
+    type = 'instance_mask',
     sequence = 1, # sequence values should be unique for all the labels of a task.
     attributes = [
         {
@@ -31,4 +32,5 @@ new_label = Label(
     ]
 )
 
+# adds or updates labels
 updated_task = task.add_label(new_label)
