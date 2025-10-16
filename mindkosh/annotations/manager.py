@@ -187,14 +187,20 @@ def validate_mk_datasets(file_path):
             for anno_type in supported_anno_types:
                 if anno_type in image:
                     for anno in image[anno_type]:
-                        label = anno['label'] if isinstance(anno['label'],str) else label_id_name_mapping[anno['label']]
+                        label = label_id_name_mapping[anno['label']]
                         labels.add(label)
 
                         if anno_type == 'boxes':
                             assert all([v in anno for v in ('xtl','ytl','xbr','ybr')])
-                        elif anno_type == 'polygons':
+                        elif anno_type == 'cuboids':
                             assert all([v in anno for v in ('xtl1','ytl1','xbl1','ybl1','xtr1','ytr1',
                                     'xbr1','ybr1','xtl2','ytl2','xbl2','ybl2','xtr2','ytr2','xbr2','ybr2')])
+                        elif anno_type == 'polygons':
+                            group = anno['group_id']
+                            if group is not None:
+                                assert isinstance(group, int) and group >= 0
+                            for polygon_obj in anno['objects']:
+                                assert 'points' in polygon_obj and len(polygon_obj['points']) % 2 == 0
                         else:
                             assert 'points' in anno and len(anno['points']) % 2 == 0
 
@@ -209,7 +215,7 @@ def validate_mk_datasets(file_path):
                             get_labels(json_data)
         else:
             get_labels(json.load(open(file_path)))
-    except:
+    except Exception as e:
         raise Exception(f"Couldn't find mindkosh annotations at {file_path}")
 
     return labels
