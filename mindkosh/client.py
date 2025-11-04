@@ -15,7 +15,7 @@ from .task import Task
 from .utils import DataSetProperty
 from .core import CoreAPI, APIConfig
 from .datasets.data_handler import DataSetUploader
-from .datasets.helpers import verify_manifest, verify_resources
+from .datasets.helpers import verify_manifest, verify_resources, validate_related_file_extra, validate_user_cloud_manifest_file
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -225,11 +225,11 @@ class Client:
 
     def create_dataset_from_cloud_data(
             self,
-            name,
-            data_type,
-            resource,
-            directory,
-            location=None
+            name: str,
+            data_type: str,
+            resource: str,
+            directory: str,
+            location: str = 'ap-south-1'
     ):
         data_type = data_type.lower()
         data_type = DataSetProperty.DataType(data_type).value
@@ -254,8 +254,57 @@ class Client:
             if response.status_code == requests.codes.created:
                 print('Dataset created')
                 return response.json()
-        except requests.exceptions.HTTPError as e:
+        except requests.exceptions.RequestException as e:
             raise e
+
+    
+    def scan_user_cloud(
+            self,
+            dataset_id: int,
+            manifest_file_path: str = None
+        ):
+        """
+        Scan user cloud data with or without manifest file.
+        """
+        files = []
+        if manifest_file_path:
+            data_type = self._get_data_type(dataset_id)
+            if data_type != 'pointcloud':
+                raise Exception("manifest file is only supported for pointcloud datasets")
+            validate_user_cloud_manifest_file(manifest_file_path)
+            files=[('manifest_file', (manifest_file_path, open(manifest_file_path,'rb'), 'application/json'))]
+
+        try:
+            response = self.session.post(
+                url=self.api.scan_user_cloud(dataset_id),
+                data={}, files=files
+            )
+            if response.status_code == requests.codes.accepted:
+                status_api = self.api.scan_user_cloud_status(response.json()['job_id'])
+                wait_time = 0
+                while wait_time < 60:
+                    res = self.session.get(status_api)
+                    res_json = res.json()
+                    state = res_json['state'].lower()
+                    if state == 'finished':
+                        msg = 'Files have been successfully scanned'
+                        logger.info(msg)
+                        return msg
+                    elif state == 'failed':
+                        raise Exception(f"Exception occured while scanning files. {res_json['message']}")
+                    wait_time += 2
+                    time.sleep(2)
+                msg = 'Files are being scanned. Please wait for some time and check again'
+                logger.info(msg)
+                return msg
+            
+            elif response.status_code == requests.code.bad_request:
+                raise Exception(response.text)
+            response.raise_for_status()
+
+        except requests.exceptions.RequestException as e:
+            raise e
+
 
     def get_datasets(
         self,
@@ -279,7 +328,7 @@ class Client:
                 )
                 response.raise_for_status()
                 return response.json()
-            except requests.exceptions.HTTPError as e:
+            except requests.exceptions.RequestException as e:
                 raise e
 
         if storage_method:
@@ -399,7 +448,7 @@ class Client:
                     break
                 page += 1
 
-            except requests.exceptions.HTTPError as e:
+            except requests.exceptions.RequestException as e:
                 raise e
         print('\nTotal files downloaded : ', files_downloaded)
 
@@ -686,11 +735,7 @@ class PointCloudFile:
         for related_file in related_files:
             if type(related_file).__name__ != "ImageFile":
                 raise DatasetFileError('invalid related file object')
-            
-            if 'device_id' not in related_file.extra:
-                raise DatasetFileError('device_id is required for a related file')
-            if not isinstance(related_file.extra['device_id'],int) or related_file.extra['device_id']<0:
-                raise DatasetFileError('Invalid device_id')
+            validate_related_file_extra(related_file.extra)
 
 
 class ImageFile:
