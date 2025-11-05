@@ -237,6 +237,7 @@ def validate_user_cloud_manifest_file(manifest_filepath):
     if len(json_data) > 10000:
         raise Exception("File too large")
     
+    sequence_list = []
     for item in json_data:
         try:
             mainfile = item['mainfile']
@@ -245,6 +246,11 @@ def validate_user_cloud_manifest_file(manifest_filepath):
         if not mainfile.endswith('.pcd'):
             raise Exception(f"Invalid file extension for mainfile {mainfile}. Only '.pcd' files are supported")
         
+        sequence = item.get('sequence', None)
+        if sequence is not None and (not isinstance(sequence, int) or sequence < 1):
+            raise Exception("Sequence should be a positive integer")
+        sequence_list.append(sequence)
+
         tags = item.get('tags', [])
         if not isinstance(tags, (list, tuple)) or len(tags) > 10:
             raise Exception(f"Invalid tags list for mainfile {mainfile}")
@@ -263,3 +269,6 @@ def validate_user_cloud_manifest_file(manifest_filepath):
                 raise Exception(f"Invalid tags list for ref_image {filepath}")
             
             validate_related_file_extra(ref_img['camera_params'])
+
+    if len(sequence_list) != len(set(sequence_list)):
+        raise Exception("Duplicate sequence value found")
