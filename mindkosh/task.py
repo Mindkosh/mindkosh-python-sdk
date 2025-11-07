@@ -610,7 +610,7 @@ class Task:
         if webhook_url:
             if not validators.url(webhook_url):
                 raise Exception('Invalid webhook url')
-            url += f'?webhook_url={webhook_url}'
+            url += f'&webhook_url={webhook_url}'
 
         validated_format = AnnotationFormats.validate(format, self.category)
         payload = {'task_id': self.task_id, 'description': description,

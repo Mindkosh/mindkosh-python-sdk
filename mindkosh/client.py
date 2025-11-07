@@ -8,6 +8,7 @@ import logging
 from urllib.parse import urljoin
 from PIL import Image
 from io import BytesIO
+from json import JSONDecodeError
 
 from .exceptions import AuthorizationError, NetworkError, InternalServerError, DataSetError, DatasetFileError, SubscriptionError
 from .project import Project
@@ -118,6 +119,8 @@ class Client:
                 raise Exception('dataset_id not found')
             response.raise_for_status()
             return response
+        except JSONDecodeError:
+            return response.text
         except requests.exceptions.RequestException as e:
             raise e
 
@@ -171,7 +174,7 @@ class Client:
         add: list = [],
         remove: list = [],
         all: bool = False
-    ) -> list:
+    ) -> bool:
         """
         Add/Remove tags to given `datasetfile_ids` for a dataset.
         Update tags for all dataset files for given dataset_id if `all=True`
@@ -180,7 +183,7 @@ class Client:
         :param add: list of tags to be added.
         :param remove: list of tags to be removed.
         :param all: `True` to update tags for entire dataset else `False`.
-        Returns list of updated dataset files.
+        Returns True if tags were successfully updated else throws error.
         """
         url = self.api.dataset_files_tags()
         payload = {
@@ -191,7 +194,8 @@ class Client:
             'all' : all
         }
 
-        return self._post(url,payload)
+        self._post(url,payload)
+        return True
 
 
     def create_dataset(
