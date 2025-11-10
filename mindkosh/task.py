@@ -7,6 +7,7 @@ import logging
 import requests
 import validators
 
+from typing import Union
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 from matplotlib.lines import Line2D
@@ -414,7 +415,9 @@ class Task:
         return str(self.__dict__)
 
     def __repr__(self):
-        return self.name
+        if getattr(self, "_deleted", False):
+            return "<Task (deleted)>"
+        return f"<Task id={self.task_id!r} name={self.name!r}>"
 
     @property
     def meta(self):
@@ -502,10 +505,13 @@ class Task:
         if message:
             Comment.add_comment(self.client, issue_id, message)
 
-    def delete(self):
+    def delete(self) -> None:
         self._delete_task(self.client, self.task_id)
+        for attr in list(vars(self).keys()):
+            setattr(self, attr, None)
+        self._deleted = True
 
-    def update_name(self, name):
+    def update_name(self, name: str) -> None:
         name = verify_name(name, 'task')
 
         try:
@@ -703,7 +709,8 @@ class Task:
         qc_data: int = 20,
         multi_annotators: bool = False,
         **kwargs
-    ):
+    ) -> "Task | str":
+        
         """
         Creates a task for given `dataset_id` and `tags`.
 
@@ -714,7 +721,7 @@ class Task:
         :param batches: Devides the task into multiple jobs.
         :param qc_data: percentage of data that should be marked for qc.
 
-        Returns : task creation state (failed/success)
+        Returns : Task object if task is created successfully else a string
         """
 
         name = verify_name(name, 'task')
@@ -784,10 +791,12 @@ class Task:
     def _wait_till_done(cls, job_id):
         url = cls.client.api.tasks_status(job_id)
         while True:
-            res = cls.client.session.get(url)
-            state = res.json()['state']
-            if state == 'Finished' or state == 'Failed':
-                return state
+            res = cls.client.session.get(url).json()
+            state = res['state'].lower()
+            if state == 'finished':
+                return cls.get(res['result']['task_id'])
+            elif state == 'Failed':
+                return f"Failed to create task. {res['message']}"
             time.sleep(2)
 
     @staticmethod
