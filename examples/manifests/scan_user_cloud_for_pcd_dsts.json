@@ -1,0 +1,34 @@
+[
+    {
+        "mainfile": "files/test-pcd/test.pcd",
+        "tags": ["test1", "test2", "test3", "test4", "test4", "test5"],
+        "sequence": 4
+    },
+
+    {
+        "mainfile": "files/test-pcd/a2.pcd",
+        "tags" : [],
+        "ref_images" : [
+            {"filepath" : "files/test-img/random_file_10798.jpg", "tags": ["tag2"], 								"camera_params":{"device_id":1}},
+            {"filepath" : "files/test-img/random_file_371244.jpg",
+            				 "tags": ["tag1", "test3", "test4"], "camera_params":{"device_id":2}}
+        ]
+    },
+
+    {
+        "mainfile": "test-manifest-file/example_pointcloud1.pcd",
+        "sequence": 1,
+        "ref_images" : [
+            {"filepath" : "test-manifest-file/one_png.png", "tags": [], "camera_params":{"device_id":1}},
+            {"filepath" : "test-manifest-file/ten_png.png", "tags": [], "camera_params":{"device_id":2,
+            "intrinsic":[1,23,5,6], "extrinsic":[[1,2,3,4],[1,2,3,4],[3,4,5,6],[1,2,3,6]],
+            "distortion":[1,2,3,4], "mirror":4, "cameraModel":"FISHEYE"}}
+        ]
+    },
+    
+    {
+        "mainfile": "test-manifest-file/office1.pcd",
+        "sequence": 2,
+        "tags": ["test1", "test2", "test3", "test4", "test4", "test5"]
+    }
+]

@@ -1,0 +1,21 @@
+[
+    {
+        "mainfile": "files/test-img/2ba018af-ea60-48d3-8986-f0519c99a34b_random_file_10798.jpg",
+        "tags": ["test1", "test2", "test3", "test4", "test4", "test5"],
+        "sequence": 1
+    },
+
+    {
+        "mainfile": "files/test-img/aad78013-81c7-4cd0-8c60-1507f0d227ab_random_file_371244.jpg",
+        "tags" : [],
+        "ref_images" : []
+    },
+
+    {
+        "mainfile": "test-manifest-file/one_png.png",
+        "sequence": 3,
+        "ref_images" : [
+            {"filepath" : "test-manifest-file/ten_png.png", "tags": ["inner tag"], "camera_params":{"device_id":2}}
+        ]
+    }
+]

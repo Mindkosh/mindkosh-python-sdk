@@ -273,9 +273,7 @@ class Client:
         files = []
         if manifest_file_path:
             data_type = self._get_data_type(dataset_id)
-            if data_type != 'pointcloud':
-                raise Exception("manifest file is only supported for pointcloud datasets")
-            validate_user_cloud_manifest_file(manifest_file_path)
+            validate_user_cloud_manifest_file(manifest_file_path, data_type)
             files=[('manifest_file', (manifest_file_path, open(manifest_file_path,'rb'), 'application/json'))]
 
         try:

@@ -232,19 +232,21 @@ def validate_related_file_extra(extra: dict):
         raise Exception(errors)
 
 
-def validate_user_cloud_manifest_file(manifest_filepath):
+def validate_user_cloud_manifest_file(manifest_filepath, data_type):
     json_data = json.load(open(manifest_filepath, 'r'))
     if len(json_data) > 10000:
         raise Exception("File too large")
     
+    valid_relatedfile_types = ('.jpg', '.jpeg', '.png')
+    valid_mainfile_types = ('.pcd',) if data_type=='pointcloud' else valid_relatedfile_types if data_type=='image' else ()
     sequence_list = []
     for item in json_data:
         try:
             mainfile = item['mainfile']
         except KeyError:
             raise Exception("each item requires a mainfile")
-        if not mainfile.endswith('.pcd'):
-            raise Exception(f"Invalid file extension for mainfile {mainfile}. Only '.pcd' files are supported")
+        if not mainfile.endswith(valid_mainfile_types):
+            raise Exception(f"Invalid file extension for mainfile {mainfile}. Supported file extensions are: {valid_mainfile_types}")
         
         sequence = item.get('sequence', None)
         if sequence is not None and (not isinstance(sequence, int) or sequence < 1):
@@ -261,7 +263,7 @@ def validate_user_cloud_manifest_file(manifest_filepath):
                 filepath = ref_img['filepath']
             except KeyError:
                 raise Exception("each ref_image requires a filepath")
-            if not filepath.endswith(('.jpg', '.jpeg', '.png')):
+            if not filepath.endswith(valid_relatedfile_types):
                 raise Exception(f"Invalid file extension for ref_image {filepath}")
             
             tags = ref_img.get('tags', [])
