@@ -2,12 +2,12 @@
 # Author: Parmeshwar Kumawat
 
 import os
+import re
 import time
 import logging
 import requests
 import validators
 
-from typing import Union
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 from matplotlib.lines import Line2D
@@ -695,6 +695,39 @@ class Task:
 
         except requests.exceptions.RequestException as e:
             raise e
+        
+    def download_issues(self,
+            save_at:str,
+            job_ids:list = []
+        ) -> None:
+        """
+        Download issues in csv format for a task.
+
+        :param save_at: Local directory where to save the exported issues.
+        :param job_ids: Export issues for job_ids if it's not empty, else export issues for entire task
+        """
+
+        if not os.path.isdir(save_at) or not os.path.exists(save_at):
+            raise IOError('invalid directory ', save_at)
+
+        payload = {'task_id': self.task_id, 'job_ids': job_ids}
+        
+        try:
+            response = self.client.session.post(
+                url=self.client.api.export_issues(), json=payload)
+            response.raise_for_status()
+
+            c_d = response.headers.get("Content-Disposition", "")
+            match = re.findall('filename="(.+)"', c_d)
+            filename = match[0] if match else f"task_id_{self.task_id}_issues.csv" 
+            full_path = os.path.join(save_at, filename) 
+            with open(full_path, "wb") as f:
+                f.write(response.content)
+
+            print("Issues downloaded: ", full_path)
+        except requests.exceptions.RequestException as e:
+            raise e
+
 
     @classmethod
     def create(
