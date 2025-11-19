@@ -579,12 +579,17 @@ class Client:
         max_size = sub['values']['image']['max_size'] if sub else 10 * 10**8
         incoming_storage = 0
         invalid_files = 0
+        sequence_set = []
         for imagefile in imagefiles:
             if type(imagefile).__name__ != "ImageFile":
                 raise DatasetFileError("imagefiles: Invalid list of mindkosh.ImageFile objects")
             if imagefile._size > max_size:
                 invalid_files += 1
             incoming_storage += imagefile._size
+            sequence_set.append(imagefile.sequence)
+
+        if len(sequence_set) != len(set(sequence_set)):
+            raise DatasetFileError("Duplicate sequence values found")
         if invalid_files:
             raise SubscriptionError(f"{invalid_files} files are larger than max_size limit for current subscription plan")
         
@@ -628,6 +633,7 @@ class Client:
         incoming_storage, invalid_files = 0, 0
         related_imagefiles = []
 
+        sequence_set = []
         for pcdfile in pointcloudfiles:
             if type(pcdfile).__name__ != "PointCloudFile":
                 raise DatasetFileError("pointcloudfiles: Invalid list of mindkosh.PointCloudFile objects")
@@ -639,6 +645,10 @@ class Client:
                 invalid_files += 1
             incoming_storage += pcdfile._size
             related_imagefiles.extend(pcdfile.related_files)
+            sequence_set.append(pcdfile.sequence)
+
+        if len(sequence_set) != len(set(sequence_set)):
+            raise DatasetFileError("Duplicate sequence values found")
         if invalid_files:
             raise SubscriptionError(f"{invalid_files} files are larger than max_size limit for current subscription plan")
     
@@ -648,7 +658,9 @@ class Client:
         stream_url = self.api.dataset_upload_status(dataset_id, batch_key)
 
         uploader = DataSetUploader(
-            dataset_id, batch_key, file_upload_url, stream_url, self.auth_header, data_type)
+            dataset_id, batch_key, file_upload_url, stream_url,
+            self.auth_header, data_type, max(sequence_set) + 1
+        )
         
         if related_imagefiles:
             self._validate_incoming_storage('image', len(related_imagefiles), incoming_storage)
@@ -680,6 +692,7 @@ class Client:
         return response['batch_key']
     
     def _update_files_count(self, files_uploaded, data_type):
+        # TODO: refresh client.org.subscription instead of using this
         if isinstance(data_type, DataSetProperty.DataType):
             data_type = data_type.value
         key = data_type + 's_count' 
@@ -709,6 +722,7 @@ class PointCloudFile:
     def __init__(
             self,
             filepath: str,
+            sequence: int,
             related_files: list = [],
             tags: list = [],
             extra: dict = {}
@@ -719,6 +733,9 @@ class PointCloudFile:
         if extension != '.pcd':
             raise DatasetFileError("Invalid pcd file")
         
+        if not isinstance(sequence, int) or sequence < 1:
+            raise DatasetFileError("Invalid sequence")
+        
         self._validate_tags(tags)
         self._validate_related_files(related_files)
 
@@ -726,10 +743,12 @@ class PointCloudFile:
         self.related_files = related_files
         self.tags = tags
         self.extra = extra
+        self.sequence = sequence
         self._size = os.path.getsize(filepath)
 
     def _validate_tags(self, tags):
-        pass
+        if not isinstance(tags,list) or len(tags) > 20 or not all(isinstance(tag, str) for tag in tags):
+            raise DatasetFileError("Invalid list of tags")
 
     def _validate_related_files(self, related_files):
         if len(related_files) > 20:
@@ -737,22 +756,30 @@ class PointCloudFile:
         for related_file in related_files:
             if type(related_file).__name__ != "ImageFile":
                 raise DatasetFileError('invalid related file object')
+            
+            # auto-increment sequence is used for related files as they already have device_id for order
+            related_file.sequence = None
+
             validate_related_file_extra(related_file.extra)
 
 
 class ImageFile:
-    def __init__(self, filepath: str, tags: list = [], extra: dict = {}):
+    def __init__(self, filepath: str, sequence: int = None, tags: list = [], extra: dict = {}):
         if not os.path.exists(filepath):
             raise FileNotFoundError(f"Invalid filepath: '{filepath}'")
         extension = os.path.splitext(filepath)[1]
         if extension not in ('.jpg', '.png', '.jpeg'):
             raise DatasetFileError(f"'{extension}' files are not supported")
         
-        if not isinstance(tags,list):
-            raise DatasetFileError('tags: a list of items is required')
+        if not isinstance(tags,list) or len(tags) > 20 or not all(isinstance(tag, str) for tag in tags):
+            raise DatasetFileError("Invalid list of tags")
+        
+        if sequence and (not isinstance(sequence, int) or sequence < 1):
+            raise DatasetFileError("Invalid sequence")
             
         self.filepath = filepath
         self.tags = tags
         self.extra = extra
+        self.sequence = sequence
         self._size = os.path.getsize(filepath)
 

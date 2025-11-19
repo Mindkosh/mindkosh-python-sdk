@@ -21,12 +21,13 @@ logger = logging.getLogger(__name__)
 class DataSetUploader:
     def __init__(
         self,
-        dataset_id,
-        batch_key,
-        file_upload_url,
-        stream_url,
-        headers,
-        data_type='image'
+        dataset_id: int,
+        batch_key: str,
+        file_upload_url: str,
+        stream_url: str,
+        headers: dict,
+        data_type: str = 'image',
+        sequence_starter: int = 1
     ):
 
         self.dataset_id = dataset_id
@@ -35,7 +36,7 @@ class DataSetUploader:
         self.stream_url = stream_url
         self.headers = headers
         self._data_type = data_type
-        self._sequence = 1
+        self._sequence = sequence_starter
         self.event = threading.Event()
 
     def _skip_file(self,
@@ -145,7 +146,7 @@ class DataSetUploader:
             "file_size": imagefile._size,
             "meta_data": {
                 "batch_key": self.batch_key,
-                "sequence": self._sequence
+                "sequence": getattr(imagefile, 'sequence', None) or self._sequence
             }
         }
 
@@ -188,7 +189,7 @@ class DataSetUploader:
             "file_size": pcdfile._size,
             "meta_data": {
                 "batch_key": self.batch_key,
-                "sequence": self._sequence
+                "sequence": pcdfile.sequence
             }
         }
 
@@ -209,7 +210,6 @@ class DataSetUploader:
 
         resp.raise_for_status()
         resp_json = resp.json()
-        self._sequence += 1
 
         presigned_url = resp_json['url']
         fields = resp_json['fields']
