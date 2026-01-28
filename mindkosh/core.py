@@ -163,6 +163,12 @@ class CoreAPI():
 
     def dataset_files_tags(self):
         return f"dataset/files/tags"
+    
+    def scan_user_cloud(self, dataset_id):
+        return f"{self.datasets_id(dataset_id)}/scan-user-cloud"
+    
+    def scan_user_cloud_status(self, job_id):
+        return f"{self.datasets}/scan-user-cloud-status?job_id={job_id}"
 
     """misc"""
 

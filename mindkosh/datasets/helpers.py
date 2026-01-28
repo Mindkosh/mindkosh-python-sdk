@@ -3,6 +3,7 @@ import json
 import glob
 import shutil
 import tempfile
+import validators
 
 from alive_progress import alive_bar
 from PIL import Image
@@ -194,3 +195,82 @@ def verify_manifest(manifest, save_files_dir, dataset_id, category):
     if save_files_dir:
         shutil.move(save_files_dir_temp, save_files_dir)
     return files
+
+
+def validate_related_file_extra(extra: dict):
+    errors = []
+    device_id = extra.get('device_id', None)
+    if device_id is None or not isinstance(device_id, int) or device_id < 0:
+        errors.append('Invalid device_id')
+
+    supported_url = extra.get('supported_file_url', None)
+    if supported_url and not validators.url(supported_url):
+        errors.append('invalid supported_url')
+
+    if 'cameraModel' in extra and extra['cameraModel'] not in ('PINHOLE', 'FISHEYE'):
+        errors.append('Invalid choice for cameraModel')
+    if 'mirror' in extra and not isinstance(extra['mirror'], int):
+        errors.append('Invalid mirror value')
+
+    intrinsic = extra.get('intrinsic', None)
+    if intrinsic:
+        if not isinstance(intrinsic,list) or (len(intrinsic)!=4 or not all(isinstance(item, (int,float)) for item in intrinsic)):
+            errors.append('Invalid intrinsic values')
+
+    distortion = extra.get('distortion', None)
+    if distortion:
+        if not isinstance(distortion,list) or (len(distortion)>10 or not all(isinstance(item, (int,float)) for item in distortion)):
+            errors.append('Invalid distortion values')
+
+    extrinsic = extra.get('extrinsic', None)
+    if extrinsic:
+        if not isinstance(extrinsic,list) or (len(extrinsic)!=4 or not all(len(grid)==4 and all(isinstance(item, (int,float)) \
+                                                    for item in grid) for grid in extrinsic)):
+            errors.append('Invalid extrinsic values')
+
+    if errors:
+        raise Exception(errors)
+
+
+def validate_user_cloud_manifest_file(manifest_filepath, data_type):
+    json_data = json.load(open(manifest_filepath, 'r'))
+    if len(json_data) > 10000:
+        raise Exception("File too large")
+    
+    valid_relatedfile_types = ('.jpg', '.jpeg', '.png')
+    valid_mainfile_types = ('.pcd',) if data_type=='pointcloud' else valid_relatedfile_types if data_type=='image' else ()
+    sequence_list = []
+    for item in json_data:
+        try:
+            mainfile = item['mainfile']
+        except KeyError:
+            raise Exception("each item requires a mainfile")
+        if not mainfile.endswith(valid_mainfile_types):
+            raise Exception(f"Invalid file extension for mainfile {mainfile}. Supported file extensions are: {valid_mainfile_types}")
+        
+        sequence = item.get('sequence', None)
+        if sequence is not None and (not isinstance(sequence, int) or sequence < 1):
+            raise Exception("Sequence should be a positive integer")
+        sequence_list.append(sequence)
+
+        tags = item.get('tags', [])
+        if not isinstance(tags, (list, tuple)) or len(tags) > 10:
+            raise Exception(f"Invalid tags list for mainfile {mainfile}")
+        
+        ref_images = item.get('ref_images', [])
+        for ref_img in ref_images:
+            try:
+                filepath = ref_img['filepath']
+            except KeyError:
+                raise Exception("each ref_image requires a filepath")
+            if not filepath.endswith(valid_relatedfile_types):
+                raise Exception(f"Invalid file extension for ref_image {filepath}")
+            
+            tags = ref_img.get('tags', [])
+            if not isinstance(tags, (list, tuple)) or len(tags) > 10:
+                raise Exception(f"Invalid tags list for ref_image {filepath}")
+            
+            validate_related_file_extra(ref_img['camera_params'])
+
+    if len(sequence_list) != len(set(sequence_list)):
+        raise Exception("Duplicate sequence value found")

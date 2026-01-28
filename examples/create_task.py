@@ -48,23 +48,13 @@ label2 = Label(
 
 
 # create task
-client.task.create(
+task = client.task.create(
     name=name,
     labels=[label1, label2],
     dataset_id=dataset_id,
     batches=2
 )
 
+print(task.name)
 
-task_list = client.task.get()  # return list of task objects
-
-# Get task IDS
-keys = [task.task_id for task in task_list]
-print(keys)
-
-# Get a task
-example_task = client.task.get(task_id=keys[0])
-print(example_task.name)
-
-# Update name of the task
-example_task.update_name("New name - " + example_task.name)
+task.update_name("New name - " + task.name)
