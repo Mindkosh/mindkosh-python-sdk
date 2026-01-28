@@ -2,7 +2,17 @@
 # Author: Parmeshwar Kumawat
 
 import re
+from enum import Enum
 from .exceptions import InvalidLabelError
+
+
+class LabelType(str, Enum):
+    SEMANTIC_MASK = 'semantic_mask'
+    INSTANCE_MASK = 'instance_mask'
+
+    @classmethod
+    def values(cls):
+        return tuple(x.value for x in cls)
 
 
 class Label:
@@ -10,6 +20,7 @@ class Label:
         self,
         name: str,
         color: str,
+        type : str = None,
         sequence: int = None,
         extra: dict = {},
         **kwargs
@@ -20,6 +31,11 @@ class Label:
         self.sequence = sequence
         self.track = kwargs.get('track', False)
         self.lock_dimensions = kwargs.get('lock_dimensions', False)
+
+        if type:
+            self.type = type
+            if self.type not in LabelType.values():
+                raise InvalidLabelError('Invalid label type')
 
         if 'id' in kwargs:
             self.id = kwargs['id']
