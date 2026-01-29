@@ -3,7 +3,7 @@
 
 from .task import Task, Frame, PointCloud
 from .project import Project
-from .testset import TestSet
+from .annotations.testset import TestSet
 
 
 class APIConfig():
