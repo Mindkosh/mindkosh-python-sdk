@@ -18,7 +18,7 @@ def get_requirements():
 
 setup(
     name='mindkosh',
-    version='1.0.1',
+    version='1.0.2',
     description="Mindkosh Python SDK",
     long_description=get_long_description(),
     url='https://github.com/Mindkosh/mindkosh-python-sdk',
