@@ -75,17 +75,8 @@ class CoreAPI():
     def jobs_for_a_task(self, task_id):
         return f"{self.tasks}/{task_id}/jobs"
 
-    def issues(self):
-        return f"issues"
-
     def comments(self):
         return f"comments"
-
-    def task_issues(self, task_id):
-        return f"{self.issues()}?task={task_id}"
-
-    def frame_issues(self, job_id, frame):
-        return f"{self.issues()}?job={job_id}&frame={frame}"
 
     def task_data_meta(self):
         return f"task-data/meta"
@@ -118,6 +109,21 @@ class CoreAPI():
 
     def download_release(self, release_id):
         return f'{self.release_id(release_id)}?action=download'
+    
+
+    """ Issue api calls """
+
+    def issues(self):
+        return f"issues"
+    
+    def export_issues(self):
+        return f"{self.issues()}/export-csv"
+    
+    def task_issues(self, task_id):
+        return f"{self.issues()}?task={task_id}"
+
+    def frame_issues(self, job_id, frame):
+        return f"{self.issues()}?job={job_id}&frame={frame}"
 
     """ cloud api calls """
 
