@@ -7,16 +7,13 @@ import tempfile
 import shutil
 import zipfile
 from datetime import datetime
-
 import numpy as np
-try:
-    import datumaro as dm
-    from datumaro.components import media
-except ImportError:
-    pass
-
 
 def convert(datasetspath, format, newformat, location):
+    try:
+        import datumaro
+    except ImportError:
+        raise Exception("datumaro==0.3.1 is not installed")
     filename = datetime.now().strftime("%Y_%m_%d-%I_%M_%S_%p")
     annotationfile = os.path.join(location, newformat + "_" + filename)
     tempdir1, tempdir2 = tempfile.mkdtemp(), tempfile.mkdtemp()
@@ -25,7 +22,7 @@ def convert(datasetspath, format, newformat, location):
         zip_ref.extractall(tempdir1)
 
     try:
-        dataset = dm.Dataset.import_from(tempdir1, format)
+        dataset = datumaro.Dataset.import_from(tempdir1, format)
         dataset.export(tempdir2, format=newformat, save_images=False)
         shutil.make_archive(annotationfile, 'zip', tempdir2)
 
@@ -40,6 +37,10 @@ def convert(datasetspath, format, newformat, location):
 
 
 def create(frames, raw_annotations, labels, annotationfile, annotationformat):
+    try:
+        import datumaro as dm
+    except ImportError:
+        raise Exception("datumaro==0.3.1 is not installed")
     assert annotationformat in (
         'coco', 'yolo', 'voc', 'datumaro'), f"invalid dataset format : {annotationformat}"
 
@@ -134,7 +135,6 @@ def create(frames, raw_annotations, labels, annotationfile, annotationformat):
 
 
 def _verify_annotations(file_path,annotation_format,labels):
-    #TODO: add kitti validator
     if annotation_format=='segmentation_mask':
         raise Exception('format not supported')
     
@@ -153,7 +153,11 @@ def _verify_annotations(file_path,annotation_format,labels):
     elif annotation_format == 'cvat':
         return
     else:
-        dataset = dm.Dataset.import_from(tempDir, annotation_format)
+        try:
+            import datumaro
+        except ImportError:
+            raise Exception("datumaro==0.3.1 is not installed")
+        dataset = datumaro.Dataset.import_from(tempDir, annotation_format)
         categories = dataset.categories()
         category_dict = (next(iter(categories.values()))._indices)
         if annotation_format=='voc':
@@ -187,14 +191,20 @@ def validate_mk_datasets(file_path):
             for anno_type in supported_anno_types:
                 if anno_type in image:
                     for anno in image[anno_type]:
-                        label = anno['label'] if isinstance(anno['label'],str) else label_id_name_mapping[anno['label']]
+                        label = label_id_name_mapping[anno['label']]
                         labels.add(label)
 
                         if anno_type == 'boxes':
                             assert all([v in anno for v in ('xtl','ytl','xbr','ybr')])
-                        elif anno_type == 'polygons':
+                        elif anno_type == 'cuboids':
                             assert all([v in anno for v in ('xtl1','ytl1','xbl1','ybl1','xtr1','ytr1',
                                     'xbr1','ybr1','xtl2','ytl2','xbl2','ybl2','xtr2','ytr2','xbr2','ybr2')])
+                        elif anno_type == 'polygons':
+                            group = anno['group_id']
+                            if group is not None:
+                                assert isinstance(group, int) and group >= 0
+                            for polygon_obj in anno['objects']:
+                                assert 'points' in polygon_obj and len(polygon_obj['points']) % 2 == 0
                         else:
                             assert 'points' in anno and len(anno['points']) % 2 == 0
 
@@ -209,7 +219,7 @@ def validate_mk_datasets(file_path):
                             get_labels(json_data)
         else:
             get_labels(json.load(open(file_path)))
-    except:
+    except Exception as e:
         raise Exception(f"Couldn't find mindkosh annotations at {file_path}")
 
     return labels
@@ -218,6 +228,7 @@ def validate_mk_datasets(file_path):
 def validate_kitti_datasets(file_path):
     """Returns labels present in datasets
     """
+    #TODO: Needs to be updated according to the new mindkosh_3d format
     labels = set()
     def get_labels(tracklets):
         tracklet_json = json.loads(tracklets)

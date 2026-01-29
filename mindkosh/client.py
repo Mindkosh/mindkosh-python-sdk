@@ -8,6 +8,7 @@ import logging
 from urllib.parse import urljoin
 from PIL import Image
 from io import BytesIO
+from json import JSONDecodeError
 
 from .exceptions import AuthorizationError, NetworkError, InternalServerError, DataSetError, DatasetFileError, SubscriptionError
 from .project import Project
@@ -15,7 +16,7 @@ from .task import Task
 from .utils import DataSetProperty
 from .core import CoreAPI, APIConfig
 from .datasets.data_handler import DataSetUploader
-from .datasets.helpers import verify_manifest, verify_resources
+from .datasets.helpers import verify_manifest, verify_resources, validate_related_file_extra, validate_user_cloud_manifest_file
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -118,6 +119,8 @@ class Client:
                 raise Exception('dataset_id not found')
             response.raise_for_status()
             return response
+        except JSONDecodeError:
+            return response.text
         except requests.exceptions.RequestException as e:
             raise e
 
@@ -171,7 +174,7 @@ class Client:
         add: list = [],
         remove: list = [],
         all: bool = False
-    ) -> list:
+    ) -> bool:
         """
         Add/Remove tags to given `datasetfile_ids` for a dataset.
         Update tags for all dataset files for given dataset_id if `all=True`
@@ -180,7 +183,7 @@ class Client:
         :param add: list of tags to be added.
         :param remove: list of tags to be removed.
         :param all: `True` to update tags for entire dataset else `False`.
-        Returns list of updated dataset files.
+        Returns True if tags were successfully updated else throws error.
         """
         url = self.api.dataset_files_tags()
         payload = {
@@ -191,7 +194,8 @@ class Client:
             'all' : all
         }
 
-        return self._post(url,payload)
+        self._post(url,payload)
+        return True
 
 
     def create_dataset(
@@ -225,11 +229,11 @@ class Client:
 
     def create_dataset_from_cloud_data(
             self,
-            name,
-            data_type,
-            resource,
-            directory,
-            location=None
+            name: str,
+            data_type: str,
+            resource: str,
+            directory: str,
+            location: str = 'ap-south-1'
     ):
         data_type = data_type.lower()
         data_type = DataSetProperty.DataType(data_type).value
@@ -254,8 +258,55 @@ class Client:
             if response.status_code == requests.codes.created:
                 print('Dataset created')
                 return response.json()
-        except requests.exceptions.HTTPError as e:
+        except requests.exceptions.RequestException as e:
             raise e
+
+    
+    def scan_user_cloud(
+            self,
+            dataset_id: int,
+            manifest_file_path: str = None
+        ):
+        """
+        Scan user cloud data with or without manifest file.
+        """
+        files = []
+        if manifest_file_path:
+            data_type = self._get_data_type(dataset_id)
+            validate_user_cloud_manifest_file(manifest_file_path, data_type)
+            files=[('manifest_file', (manifest_file_path, open(manifest_file_path,'rb'), 'application/json'))]
+
+        try:
+            response = self.session.post(
+                url=self.api.scan_user_cloud(dataset_id),
+                data={}, files=files
+            )
+            if response.status_code == requests.codes.accepted:
+                status_api = self.api.scan_user_cloud_status(response.json()['job_id'])
+                wait_time = 0
+                while wait_time < 60:
+                    res = self.session.get(status_api)
+                    res_json = res.json()
+                    state = res_json['state'].lower()
+                    if state == 'finished':
+                        msg = 'Files have been successfully scanned'
+                        logger.info(msg)
+                        return msg
+                    elif state == 'failed':
+                        raise Exception(f"Exception occured while scanning files. {res_json['message']}")
+                    wait_time += 2
+                    time.sleep(2)
+                msg = 'Files are being scanned. Please wait for some time and check again'
+                logger.info(msg)
+                return msg
+            
+            elif response.status_code == requests.code.bad_request:
+                raise Exception(response.text)
+            response.raise_for_status()
+
+        except requests.exceptions.RequestException as e:
+            raise e
+
 
     def get_datasets(
         self,
@@ -279,7 +330,7 @@ class Client:
                 )
                 response.raise_for_status()
                 return response.json()
-            except requests.exceptions.HTTPError as e:
+            except requests.exceptions.RequestException as e:
                 raise e
 
         if storage_method:
@@ -399,7 +450,7 @@ class Client:
                     break
                 page += 1
 
-            except requests.exceptions.HTTPError as e:
+            except requests.exceptions.RequestException as e:
                 raise e
         print('\nTotal files downloaded : ', files_downloaded)
 
@@ -528,12 +579,17 @@ class Client:
         max_size = sub['values']['image']['max_size'] if sub else 10 * 10**8
         incoming_storage = 0
         invalid_files = 0
+        sequence_set = []
         for imagefile in imagefiles:
             if type(imagefile).__name__ != "ImageFile":
                 raise DatasetFileError("imagefiles: Invalid list of mindkosh.ImageFile objects")
             if imagefile._size > max_size:
                 invalid_files += 1
             incoming_storage += imagefile._size
+            sequence_set.append(imagefile.sequence)
+
+        if len(sequence_set) != len(set(sequence_set)):
+            raise DatasetFileError("Duplicate sequence values found")
         if invalid_files:
             raise SubscriptionError(f"{invalid_files} files are larger than max_size limit for current subscription plan")
         
@@ -593,7 +649,9 @@ class Client:
         stream_url = self.api.dataset_upload_status(dataset_id, batch_key)
 
         uploader = DataSetUploader(
-            dataset_id, batch_key, file_upload_url, stream_url, self.auth_header, data_type)
+            dataset_id, batch_key, file_upload_url, stream_url,
+            self.auth_header, data_type
+        )
         
         if related_imagefiles:
             self._validate_incoming_storage('image', len(related_imagefiles), incoming_storage)
@@ -655,6 +713,7 @@ class Client:
         return response['batch_key']
     
     def _update_files_count(self, files_uploaded, data_type):
+        # TODO: refresh client.org.subscription instead of using this
         if isinstance(data_type, DataSetProperty.DataType):
             data_type = data_type.value
         key = data_type + 's_count' 

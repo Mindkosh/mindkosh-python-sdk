@@ -33,7 +33,7 @@ class AnnotationFormats:
             "voc": "PASCAL VOC 1.1",
             "segmentation_mask": "Segmentation mask 1.1",
             "yolo": "YOLO 1.1",
-            "mindkosh": "Mindkosh 1.0"
+            "mindkosh": "Mindkosh 1.1"
         }
     IMAGE = dict(BASIC_2D , **{"cvat" : "CVAT for images 1.1"})
     VIDEO = dict(BASIC_2D , **{"cvat" : "CVAT for video 1.1"})
