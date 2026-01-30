@@ -62,7 +62,7 @@ labeling multi-sensor data, from Lidar point clouds to multiple camera images. O
 
 * Install the package
 ```sh
-pip install .
+pip install mindkosh
 ```
 
 
