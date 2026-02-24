@@ -18,7 +18,7 @@ def get_requirements():
 
 setup(
     name='mindkosh',
-    version='1.0.2',
+    version='1.0.3',
     description="Mindkosh Python SDK",
     long_description=open("README.md").read(),
     long_description_content_type="text/markdown",

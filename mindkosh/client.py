@@ -258,6 +258,8 @@ class Client:
             if response.status_code == requests.codes.created:
                 print('Dataset created')
                 return response.json()
+            else:
+                raise Exception(response.text)
         except requests.exceptions.RequestException as e:
             raise e
 
@@ -656,7 +658,7 @@ class Client:
         if related_imagefiles:
             self._validate_incoming_storage('image', len(related_imagefiles), incoming_storage)
             logger.warning(f"Uploading {len(related_imagefiles)} related files")
-            files_uploaded = uploader.files_upload_thread(imagefiles=related_imagefiles)
+            files_uploaded = uploader.files_upload_thread(imagefiles=related_imagefiles, run_streaming_thread=True)
             uploader.event.clear()
             self._update_files_count(files_uploaded,DataSetProperty.DataType.IMAGE)
             time.sleep(10)

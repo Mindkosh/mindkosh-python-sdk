@@ -9,6 +9,7 @@ from .exceptions import InvalidLabelError
 class LabelType(str, Enum):
     SEMANTIC_MASK = 'semantic_mask'
     INSTANCE_MASK = 'instance_mask'
+    NON_MASK = 'non_mask'
 
     @classmethod
     def values(cls):
