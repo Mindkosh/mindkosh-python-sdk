@@ -281,7 +281,7 @@ class DataSetUploader:
                 # self.heartbeat_event.set()
                 # await heartbeat_task
 
-    def files_upload_thread(self, raw_filepaths=None, imagefiles=None, basefiles=None, tags=[], extra={}):
+    def files_upload_thread(self, raw_filepaths=None, imagefiles=None, basefiles=None, tags=[], extra={}, run_streaming_thread = False):
         if raw_filepaths:
             bulk_uploader = self._upload_raw_files
             uploader = self._upload_single_file
@@ -300,20 +300,24 @@ class DataSetUploader:
         num_of_files = len(files_to_upload)
         self._finished, self._skipped = 0, 0
         try:
-            status_thread = threading.Thread(target=asyncio.run, args=(
-                self._stream_status(num_of_files,),), daemon=True)
-            status_thread.start()
+            if run_streaming_thread:
+                status_thread = threading.Thread(target=asyncio.run, args=(
+                    self._stream_status(num_of_files,),), daemon=True)
+                status_thread.start()
 
-            time.sleep(0.1)
-            upload_files_thread = threading.Thread(bulk_uploader(
-                files_to_upload, uploader, tags, extra), daemon=False)
-            upload_files_thread.start()
-            status_thread.join()
+                time.sleep(0.1)
+                upload_files_thread = threading.Thread(bulk_uploader(
+                    files_to_upload, uploader, tags, extra), daemon=False)
+                upload_files_thread.start()
+                status_thread.join()
+            else:
+                bulk_uploader(files_to_upload, uploader, tags, extra)
+
         except Exception as e:
             raise e
 
         print(
-            f"Files skipped: {self._skipped}. Files uploaded: {self._finished}")
+            f"Files skipped: {self._skipped}. Files uploaded: {num_of_files - self._skipped}")
         return self._finished
 
 
