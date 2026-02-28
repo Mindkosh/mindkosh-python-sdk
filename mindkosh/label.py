@@ -21,7 +21,7 @@ class Label:
         self,
         name: str,
         color: str,
-        type : str = None,
+        type : str = 'non_mask',
         sequence: int = None,
         extra: dict = {},
         **kwargs

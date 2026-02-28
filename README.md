@@ -258,12 +258,14 @@ labels = [
     Label(
       name='car',
       color='#fffccc',
-      sequence=1
+      sequence=1,
+      type='non_mask'
     ),
     Label(
       name='bus',
       color='#fcf0fc',
       sequence=2,
+      type='instance_mask'
       attributes =[]
     )
 ]
