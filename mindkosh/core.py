@@ -94,10 +94,8 @@ class CoreAPI():
     def tasks_id_annotations_format(self, task_id, fileformat):
         return f"{self.tasks_id(task_id)}/annotations?format={fileformat}"
 
-    def tasks_id_annotations(self, task_id, public_url, fileformat):
-        if public_url:
-            return f"{self.tasks_id(task_id)}/annotations?format={fileformat}&webhook_url={public_url}"
-        return f"{self.tasks_id(task_id)}/annotations?format={fileformat}"
+    def tasks_id_annotations(self, task_id):
+        return f"{self.tasks_id(task_id)}/annotations"
 
     """Releases"""
 

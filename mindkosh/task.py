@@ -552,10 +552,12 @@ class Task:
         except requests.exceptions.HTTPError as e:
             raise e
 
-    def upload_annotations(self, annotation_format, local_path, webhook_url=None):
+    def upload_annotations(self, annotation_format, local_path, replace=False, webhook_url=None):
         """
         :param annotation_format(str): Format of annotation file
         :param local_path(str): Path to annotations file(zip)
+        :param replace(bool): Whether replace existing annotations or upload on top of them
+        :webhook_url(str): Send a ping to this url when the annotations are successfully uploaded or get failed
         """
         dst_format = AnnotationFormats.validate(
             annotation_format, self.category, upload=True)
@@ -565,17 +567,21 @@ class Task:
             _verify_annotations(local_path, annotation_format, self.labels)
 
         try:
-            url = self.client.api.tasks_id_annotations(
-                self.task_id, webhook_url, fileformat=dst_format)
+            url = self.client.api.tasks_id_annotations(self.task_id)
             f = open(local_path, 'rb')
             resp = self.client.session.put(
                 url=url,
-                data={},
-                files={'annotation_file': f.read()}
+                data={
+                    'format': dst_format,
+                    'replace': replace,
+                    'webhook_url': webhook_url
+                },
+                files = {'annotation_file': (os.path.split(local_path)[1], f, 'application/zip')}
             )
-            resp.raise_for_status()
-            if resp.status_code == 202:
-                print('Annotations upload started')
+            if resp.status_code==400:
+                return resp.text
+            if resp.status_code in (202, 201):
+                return resp.json()
             else:
                 return resp
         except requests.exceptions.RequestException as e:
