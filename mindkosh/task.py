@@ -580,8 +580,8 @@ class Task:
             )
             if resp.status_code==400:
                 return resp.text
-            if resp.status_code == 202:
-                print('Annotations are being created...')
+            if resp.status_code in (202, 201):
+                return resp.json()
             else:
                 return resp
         except requests.exceptions.RequestException as e:
