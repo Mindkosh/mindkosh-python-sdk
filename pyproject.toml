@@ -9,7 +9,7 @@ name = "mindkosh"
 description = "Mindkosh Python SDK"
 readme = "README.md"
 authors = [
-    {name="Mindkosh", email="sdevgupta@mindkosh.com" }
+    {name="Mindkosh", email="shikhar@mindkosh.com" }
 ]
 requires-python = ">=3.7"
 dependencies = [
