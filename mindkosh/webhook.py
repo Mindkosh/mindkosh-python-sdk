@@ -4,12 +4,7 @@ PORT = 5000
 app = Flask(__name__)
 
 
-@app.route("/")
-def hello():
-    return "Hello, World!"
-
-
-@app.route("/my-webhook", methods=["POST"])
+@app.route("/mindkosh", methods=["POST"])
 def mindkosh():
     print(request.json)
     return Response(status=200)

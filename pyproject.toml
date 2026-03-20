@@ -1,0 +1,45 @@
+[build-system]
+requires = ["setuptools>=58.1.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+dynamic = ["version"]
+
+name = "mindkosh"
+description = "Mindkosh Python SDK"
+readme = "README.md"
+authors = [
+    {name="Mindkosh", email="sdevgupta@mindkosh.com" }
+]
+requires-python = ">=3.7"
+dependencies = [
+    "requests==2.30.0",
+    "typing-extensions>=4.15.0",
+    "numpy==1.21.6",
+    "Pillow==9.2.0",
+    "kiwisolver==1.4.4",
+    "matplotlib==3.5.1",
+    "mplcursors==0.5.1",
+    "aiohttp==3.8.6",
+    "alive-progress==2.4.1",
+    "validators==0.20.0",
+    "python-dotenv==0.21.0"
+]
+keywords = [
+    "annotation",
+    "segmentation",
+    "pointcloud",
+    "computervision"
+]
+license = {text = "Apache-2.0"}
+
+[project.urls]
+Homepage = "https://mindkosh.com"
+Repository = "https://github.com/Mindkosh/mindkosh-python-sdk"
+
+[tool.setuptools.dynamic]
+version = {attr = "mindkosh.__version__"}
+
+[tool.setuptools]
+package-dir = {"" = "."}
+packages = {find = {include = ["mindkosh*"]}}

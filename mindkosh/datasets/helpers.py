@@ -8,7 +8,7 @@ import validators
 from alive_progress import alive_bar
 from PIL import Image
 
-from .utils import verify_filename, crop_image, rotate_image
+from mindkosh.datasets.utils import verify_filename, crop_image, rotate_image
 
 
 class DatasetFile:

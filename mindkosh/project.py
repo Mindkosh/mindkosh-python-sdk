@@ -3,8 +3,8 @@
 
 import requests
 
-from .task import Task
-from .utils import verify_name
+from mindkosh.task import Task
+from mindkosh.utils import verify_name
 
 class Project:
     def __init__(

@@ -1,9 +1,9 @@
 # Copyright (C) 2023 Mindkosh Technologies. All rights reserved.
 # Author: Parmeshwar Kumawat
 
-from .task import Task, Frame, PointCloud
-from .project import Project
-from .annotations.testset import TestSet
+from mindkosh.task import Task, Frame, PointCloud
+from mindkosh.project import Project
+from mindkosh.annotations.testset import TestSet
 
 
 class APIConfig():

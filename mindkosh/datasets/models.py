@@ -1,8 +1,28 @@
 import os
 import validators
-from ..exceptions import DatasetFileError
+from enum import Enum
+from mindkosh.exceptions import DatasetFileError
 
 __all__ = ["PointCloudFile", "ImageFile", "MainImage"]
+
+
+class Dataset:
+
+    DEFAULT_BUCKET_REGION = 'ap-south-1'
+
+    class DataType(Enum):
+        IMAGE = 'image'
+        VIDEO = 'video'
+        POINTCLOUD = 'pointcloud'
+        AUDIO = 'audio'
+
+        @classmethod
+        def values(cls):
+            return tuple((x.value, x.name) for x in cls)
+
+    class StorageMethod(Enum):
+        USER_CLOUD = 'user_cloud'
+        VK_CLOUD = 'vk_cloud'
 
 
 class BaseFile:

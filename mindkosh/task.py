@@ -30,6 +30,7 @@ from .issue import Issue, Comment
 from .annotations.tag import Tag
 from .annotations.manager import _verify_annotations
 from .exceptions import InvalidTagError, InvalidLabelError
+from .datasets.models import Dataset
 
 logger = logging.getLogger(__name__)
 
@@ -437,6 +438,34 @@ class Task:
                 self._job_id_frame_ids_mapping[segment['job']['id']] = (
                     segment['start_frame'], segment['stop_frame'])
         return self._job_id_frame_ids_mapping
+    
+    @classmethod
+    def get_default_preferences(cls):
+        DEFAULT_PREFERENCES = {
+            'image': {
+                'auto_boundary_merging': True,
+                'auto_boundary_snapping': True
+            },
+            'pointcloud' : {
+                'max_cache_size': 200
+            }
+        }
+        return DEFAULT_PREFERENCES
+    
+    @classmethod
+    def get_default_validations(cls):
+        DEFAULT_VALIDATIONS = {
+            'image': {
+                'no_empty_file': False,
+                'all_points_segmented': False
+            },
+            'pointcloud' : {
+                'no_empty_file': False,
+                'all_points_segmented': False,
+                'min_cuboid_points': 1
+            }
+        }
+        return DEFAULT_VALIDATIONS
 
     def frames(self, search: str = None, max_frames: int = 10):
         # TODO: allow page number in params
@@ -747,6 +776,8 @@ class Task:
         job_modes: list = ['validation'],
         qc_data: int = 20,
         multi_annotators: bool = False,
+        preferences: dict = {},
+        validations: dict = {},
         **kwargs
     ) -> "Task | str":
         
@@ -764,7 +795,7 @@ class Task:
         """
 
         name = verify_name(name, 'task')
-
+        
         if not multi_annotators:
             if not isinstance(qc_data, int) or not 0 <= qc_data <= 100:
                 raise Exception("Invalid qc_data")
@@ -785,7 +816,14 @@ class Task:
             label.attributes = [att.__dict__ for att in label.attributes]
             labels_json.append(label.__dict__)
 
-        url = cls.client.api.tasks
+        default_validations = cls.get_default_validations()
+        default_preferences = cls.get_default_preferences()
+        for dt in (Dataset.DataType.POINTCLOUD.value, Dataset.DataType.IMAGE.value):
+            if dt not in validations:
+                validations[dt] = default_validations[dt]
+            if dt not in preferences:
+                preferences[dt] = default_preferences[dt]
+        
         payload = {
             'name': name,
             'labels': labels_json,
@@ -796,7 +834,9 @@ class Task:
                 'dataset_id': dataset_id
             },
             'qc_data': qc_data,
-            'multi_annotators': multi_annotators
+            'multi_annotators': multi_annotators,
+            'set_validations' : validations,
+            'set_preferences' : preferences
         }
         if project_id:
             payload['project_id'] = project_id
@@ -805,7 +845,7 @@ class Task:
 
         try:
             response = cls.client.session.post(
-                url,
+                url=cls.client.api.tasks,
                 json=payload
             )
 

@@ -10,13 +10,14 @@ from PIL import Image
 from io import BytesIO
 from json import JSONDecodeError
 
-from .exceptions import AuthorizationError, NetworkError, InternalServerError, DataSetError, DatasetFileError, SubscriptionError
-from .project import Project
-from .task import Task
-from .utils import DataSetProperty
-from .core import CoreAPI, APIConfig
-from .datasets.data_handler import DataSetUploader
-from .datasets.helpers import verify_manifest, verify_resources, validate_related_file_extra, validate_user_cloud_manifest_file
+from mindkosh.project import Project
+from mindkosh.task import Task
+from mindkosh.datasets.models import Dataset
+from mindkosh.core import CoreAPI, APIConfig
+from mindkosh.datasets.data_handler import DataSetUploader
+from mindkosh.datasets.helpers import verify_manifest, verify_resources, validate_user_cloud_manifest_file
+from mindkosh.exceptions import (AuthorizationError, NetworkError, InternalServerError,
+                                  DataSetError, DatasetFileError, SubscriptionError)
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -215,9 +216,9 @@ class Client:
         Returns a json response of dataset created
         """
 
-        data_type = DataSetProperty.DataType(data_type).value
+        data_type = Dataset.DataType(data_type).value
 
-        location = location or DataSetProperty.DEFAULT_BUCKET_REGION
+        location = location or Dataset.DEFAULT_BUCKET_REGION
         url = self.api.datasets_storage_method('vk_cloud')
         payload = {
             "name": name,
@@ -236,10 +237,10 @@ class Client:
             location: str = 'ap-south-1'
     ):
         data_type = data_type.lower()
-        data_type = DataSetProperty.DataType(data_type).value
+        data_type = Dataset.DataType(data_type).value
         
         cloud_service_type = 'aws'
-        location = location or DataSetProperty.DEFAULT_BUCKET_REGION
+        location = location or Dataset.DEFAULT_BUCKET_REGION
         url = self.api.datasets_storage_method('user_cloud')
         payload = {
             "name": name,
@@ -336,7 +337,7 @@ class Client:
                 raise e
 
         if storage_method:
-            storage_method = DataSetProperty.StorageMethod(storage_method).value
+            storage_method = Dataset.StorageMethod(storage_method).value
             url += f'?storage_method={storage_method}'
 
         datasets = self._get_all(url)
@@ -601,7 +602,7 @@ class Client:
         
         data_type = self._get_data_type(dataset_id)
         self._validate_incoming_storage(data_type, num_of_files, incoming_storage)
-        if data_type != DataSetProperty.DataType.IMAGE.value:
+        if data_type != Dataset.DataType.IMAGE.value:
             raise DataSetError('Invalid dataset type')
 
         batch_key = self._create_dataset_batch(dataset_id)
@@ -622,10 +623,10 @@ class Client:
         incoming_storage, invalid_files = 0, 0
         related_imagefiles = []
 
-        if data_type==DataSetProperty.DataType.POINTCLOUD.value:
+        if data_type==Dataset.DataType.POINTCLOUD.value:
             basefile_class = "PointCloudFile" 
             max_basefile_size = sub['values']['pointcloud']['max_size'] if sub else 5 * 10**8
-        elif data_type==DataSetProperty.DataType.IMAGE.value:
+        elif data_type==Dataset.DataType.IMAGE.value:
             basefile_class = "MainImage"
             max_basefile_size = max_image_size
         else:
@@ -660,7 +661,7 @@ class Client:
             logger.warning(f"Uploading {len(related_imagefiles)} related files")
             files_uploaded = uploader.files_upload_thread(imagefiles=related_imagefiles, run_streaming_thread=True)
             uploader.event.clear()
-            self._update_files_count(files_uploaded,DataSetProperty.DataType.IMAGE)
+            self._update_files_count(files_uploaded,Dataset.DataType.IMAGE)
             time.sleep(10)
 
         logger.warning(f"Uploading {len(basefiles)} {basefile_class.lower()}s")
@@ -678,7 +679,7 @@ class Client:
         Uploads mindkosh.MainImage files along with/without their related files.
         """
         data_type = self._get_data_type(dataset_id)
-        if data_type != DataSetProperty.DataType.IMAGE.value:
+        if data_type != Dataset.DataType.IMAGE.value:
             raise DataSetError('Invalid dataset type')    
         self._upload_basefiles(dataset_id, data_type, rgbfiles)
 
@@ -693,7 +694,7 @@ class Client:
         Uploads mindkosh.PointCloud files along with/without their related files.
         """
         data_type = self._get_data_type(dataset_id)
-        if data_type != DataSetProperty.DataType.POINTCLOUD.value:
+        if data_type != Dataset.DataType.POINTCLOUD.value:
             raise DataSetError('Invalid dataset type')  
         self._upload_basefiles(dataset_id, data_type, pointcloudfiles)
 
@@ -715,8 +716,7 @@ class Client:
         return response['batch_key']
     
     def _update_files_count(self, files_uploaded, data_type):
-        # TODO: refresh client.org.subscription instead of using this
-        if isinstance(data_type, DataSetProperty.DataType):
+        if isinstance(data_type, Dataset.DataType):
             data_type = data_type.value
         key = data_type + 's_count' 
         value = getattr(self.org, key)
@@ -725,11 +725,11 @@ class Client:
     def _validate_incoming_storage(self, data_type, incoming_files, incoming_storage=0):
         sub = self.org.subscription
         if sub:
-            if data_type == DataSetProperty.DataType.IMAGE.value:
+            if data_type == Dataset.DataType.IMAGE.value:
                 files = self.org.images_count
-            elif data_type == DataSetProperty.DataType.POINTCLOUD.value:
+            elif data_type == Dataset.DataType.POINTCLOUD.value:
                 files = self.org.pointclouds_count
-            elif data_type == DataSetProperty.DataType.VIDEO.value:
+            elif data_type == Dataset.DataType.VIDEO.value:
                 files = self.org.videos_count
             else:
                 raise DataSetError('Invalid data type')
