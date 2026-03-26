@@ -874,7 +874,7 @@ class Task:
             state = res['state'].lower()
             if state == 'finished':
                 return cls.get(res['result']['task_id'])
-            elif state == 'Failed':
+            elif state == 'failed':
                 return f"Failed to create task. {res['message']}"
             time.sleep(2)
 
