@@ -53,7 +53,7 @@ labeling multi-sensor data, from Lidar point clouds to multiple camera images. O
 
 ### Requirements
 
-* Python >= 3.7
+* Python >= 3.9
 * Account on the Mindkosh platform (Create on now)
 * SDK Token (contact us to get one)
 
