@@ -53,6 +53,9 @@ class BaseFile:
             if type(related_file).__name__ != "ImageFile":
                 raise DatasetFileError('invalid related file object')
             
+            if related_file.sequence and (not isinstance(related_file.sequence, int) or related_file.sequence < 1):
+                raise DatasetFileError("Invalid sequence")
+            
             device_id = related_file._extra.get('device_id', None)
             if device_id is None or not isinstance(device_id, int) or device_id < 0:
                 raise DatasetFileError('Related file requires a positive integer value as device_id')
@@ -90,7 +93,7 @@ class MainImage(BaseFile):
 
 
 class ImageFile:
-    def __init__(self, filepath: str, tags: list = [], extra: dict = {}):
+    def __init__(self, filepath: str, sequence:int = None, tags: list = [], extra: dict = {}):
         if not os.path.exists(filepath):
             raise FileNotFoundError(f"Invalid filepath: '{filepath}'")
         extension = os.path.splitext(filepath)[1]
@@ -98,6 +101,7 @@ class ImageFile:
             raise DatasetFileError(f"'{extension}' files are not supported")
             
         self.filepath = filepath
+        self.sequence = sequence
         self._extra = extra
         self.extra = None
         self._validate_tags(tags)

@@ -5,6 +5,7 @@ import os
 import time
 import json
 import asyncio
+import httpx
 import aiohttp
 import threading
 import requests
@@ -25,6 +26,7 @@ class DataSetUploader:
         batch_key: str,
         file_upload_url: str,
         stream_url: str,
+        heartbeat_url: str,
         headers: dict,
         data_type: str = 'image',
         sequence_starter: int = 1
@@ -35,9 +37,10 @@ class DataSetUploader:
         self.file_upload_url = file_upload_url
         self.stream_url = stream_url
         self.headers = headers
+        self.heartbeat_url = heartbeat_url
         self._data_type = data_type
         self._sequence = sequence_starter
-        self.event = threading.Event()
+        self.stop_heartbeat = threading.Event()
 
     def _skip_file(self,
         message: dict
@@ -57,6 +60,7 @@ class DataSetUploader:
 
     def _upload_single_file(
         self,
+        session: requests.Session,
         datasetfile: Union[str, DatasetFile],
         tags: list,
         convert_tiff_to: str = '.png',
@@ -104,7 +108,7 @@ class DataSetUploader:
             if extra:
                 data['meta_data']['extra'] = extra
 
-        resp = requests.post(url=self.file_upload_url,
+        resp = session.post(url=self.file_upload_url,
                              json=data, headers=self.headers)
         if resp.status_code == requests.codes.bad_request:
             return self._skip_file(resp.json())
@@ -117,7 +121,7 @@ class DataSetUploader:
         fields = resp_json['fields']
         payload = fields
 
-        res = requests.post(
+        res = session.post(
             presigned_url,
             headers={},
             data=payload,
@@ -127,6 +131,7 @@ class DataSetUploader:
 
     def _upload_single_imagefile(
         self,
+        session: requests.Session,
         imagefile,
         **kwargs
     ):
@@ -155,7 +160,7 @@ class DataSetUploader:
         if imagefile.extra:
             data['meta_data']['extra'] = imagefile.extra
 
-        resp = requests.post(url=self.file_upload_url,
+        resp = session.post(url=self.file_upload_url,
                              json=data, headers=self.headers)
         if resp.status_code == requests.codes.bad_request:
             #check and skip uploading if the file is already uploaded
@@ -172,7 +177,7 @@ class DataSetUploader:
         imagefile.prefixed_filename = fields['key'].split('/')[-1]
         payload = fields
 
-        res = requests.post(
+        res = session.post(
             presigned_url,
             headers={},
             data=payload,
@@ -180,7 +185,7 @@ class DataSetUploader:
         )
         res.raise_for_status()
 
-    def _upload_single_base_file(self, basefile, **kwargs):
+    def _upload_single_base_file(self, session: requests.Session, basefile, **kwargs):
         base_name = os.path.basename(basefile.filepath)
         data = {
             "dataset_id": self.dataset_id,
@@ -202,7 +207,7 @@ class DataSetUploader:
         if related_files:
             data['meta_data']['related_files'] = related_files
 
-        resp = requests.post(url=self.file_upload_url,
+        resp = session.post(url=self.file_upload_url,
                              json=data, headers=self.headers)
         if resp.status_code == requests.codes.bad_request:
             return self._skip_file(resp.json())
@@ -215,7 +220,7 @@ class DataSetUploader:
         fields = resp_json['fields']
         payload = fields
 
-        res = requests.post(
+        res = session.post(
             presigned_url,
             headers={},
             data=payload,
@@ -223,65 +228,56 @@ class DataSetUploader:
         )
         res.raise_for_status()
 
-    def _upload_raw_files(self, files_to_upload, uploader, tags, extra, *args, **kwargs):
+    def _upload_raw_files(self, session, files_to_upload, uploader, tags, extra, *args, **kwargs):
         _uploaded = 1
         for datasetfile in files_to_upload:
-            uploader(datasetfile, tags, extra)
+            uploader(session, datasetfile, tags, extra)
             print(f'Files uploading... {_uploaded}', end='\r')
             _uploaded += 1
-        self.event.set()
 
-    def _upload_fileobjects(self, fileobjects, uploader, *args, **kwargs):
+    def _upload_fileobjects(self, session, fileobjects, uploader, *args, **kwargs):
         _uploaded = 1
         for fileobject in fileobjects:
-            uploader(fileobject)
+            uploader(session, fileobject)
             print(f'Files uploading... {_uploaded}', end='\r')
             _uploaded += 1
-        self.event.set()
 
-    async def send_heartbeat(self, session):
-        while not self.heartbeat_event.is_set():
-            try:
-                async with session.head(self.stream_url, headers=self.headers) as r:
-                    pass
-                await asyncio.sleep(100)
-            except Exception as e:
-                pass
+    def _check_final_status(self, session: requests.Session):
+        for _ in range(20):
+            response = session.get(self.stream_url, headers=self.headers, timeout=5)
+            response.raise_for_status()
+            if response.json()['status'].lower() == "completed":
+                return
+            print('processing  . . . . . . . . . ', end='\r') 
 
-    async def _stream_status(self, num_of_files):
-        async with aiohttp.ClientSession() as session:
-            # self.heartbeat_event = asyncio.Event()
-            # heartbeat_task = asyncio.create_task(self.send_heartbeat(session))
-            async with session.get(self.stream_url, headers=self.headers, timeout=None) as response:
-                while num_of_files > self._finished + self._skipped:
-                    try:
-                        chunk = await asyncio.wait_for(response.content.read(1024), timeout=60)
-                        line = chunk.decode()
-                        line = json.loads(line[6:])
-                        if line["status"] == "finished":
-                            self._finished += len(line["files"])
-                        if self.event.is_set():
-                            extracted = format(
-                                ((self._finished + self._skipped)/num_of_files)*100, '.2f')
-                            print(f"Processing... : {extracted}%", end="\r")
+            time.sleep(5)
 
-                    except json.JSONDecodeError:
-                        lines = line.replace('data: ', '').split('\n')
-                        for line in lines:
-                            if line and line[0] == '{':
-                                line = json.loads(line)
-                                if line["status"] == "finished":
-                                    self._finished += len(line["files"])
+    def _send_heartbeat(self, session: requests.Session):
+        while not self.stop_heartbeat.is_set():
+            response = session.post(
+                self.heartbeat_url,
+                json={
+                    "batch_key": self.batch_key,
+                    "final": False
+                },
+                headers=self.headers,
+                timeout=5
+            )
+            response.raise_for_status()
 
-                    except asyncio.TimeoutError:
-                        break
-                    except aiohttp.EofStream as e:
-                        raise e
-                time.sleep(1)
-                # self.heartbeat_event.set()
-                # await heartbeat_task
+            self.stop_heartbeat.wait(timeout=5)
+        
+        response = session.post(
+            self.heartbeat_url,
+            json={
+                "batch_key": self.batch_key,
+                "final": True
+            },
+            headers=self.headers
+        )
+        response.raise_for_status()
 
-    def files_upload_thread(self, raw_filepaths=None, imagefiles=None, basefiles=None, tags=[], extra={}, run_streaming_thread = False):
+    def files_upload_thread(self, raw_filepaths=None, imagefiles=None, basefiles=None, tags=[], extra={}, *args, **kwargs):
         if raw_filepaths:
             bulk_uploader = self._upload_raw_files
             uploader = self._upload_single_file
@@ -300,24 +296,26 @@ class DataSetUploader:
         num_of_files = len(files_to_upload)
         self._finished, self._skipped = 0, 0
         try:
-            if run_streaming_thread:
-                status_thread = threading.Thread(target=asyncio.run, args=(
-                    self._stream_status(num_of_files,),), daemon=True)
-                status_thread.start()
 
-                time.sleep(0.1)
-                upload_files_thread = threading.Thread(bulk_uploader(
-                    files_to_upload, uploader, tags, extra), daemon=False)
-                upload_files_thread.start()
-                status_thread.join()
-            else:
-                bulk_uploader(files_to_upload, uploader, tags, extra)
+            with requests.Session() as session:
+                heartbeat_thread = threading.Thread(
+                    target=self._send_heartbeat, 
+                    args=(session,),
+                    daemon=True
+                )
+                heartbeat_thread.start()
+                time.sleep(.5)
+                bulk_uploader(session, files_to_upload, uploader, tags, extra)
+
+                self.stop_heartbeat.set()
+                heartbeat_thread.join()
+
+                self._check_final_status(session)
 
         except Exception as e:
             raise e
 
-        print(
-            f"Files skipped: {self._skipped}. Files uploaded: {num_of_files - self._skipped}")
+        print(f"Files skipped: {self._skipped}. Files uploaded: {num_of_files - self._skipped}")
         return self._finished
 
 
@@ -328,124 +326,291 @@ class DataSetUploaderAsync:
         batch_key,
         file_upload_url,
         stream_url,
-        headers
+        heartbeat_url,
+        headers,
+        data_type
     ):
         self.dataset_id = dataset_id
         self.batch_key = batch_key
         self.file_upload_url = file_upload_url
         self.stream_url = stream_url
         self.headers = headers
-        self._sequence = 0
+        self.heartbeat_url = heartbeat_url
+        self._sequence = 1
+        self._skipped = 0
 
-    async def _get_presigned_url(
-        self,
-        session: aiohttp.ClientSession,
-        filepath: str,
-        headers: dict,
-        tags: list,
-        sequence: int,
-        **kwargs
+    def _skip_file(self,
+        message: dict
     ):
-        base_name = os.path.basename(filepath)
-        file_size = os.path.getsize(filepath)
-        data = {
-            "dataset_id": self.dataset_id,
-            "file_name": base_name,
-            "file_size": file_size,
-            "meta_data": {
-                "batch_key": self.batch_key,
-                "sequence": sequence
-            }
-        }
+        """
+        Returns prefixed filename and updates files count if the file is already uploaded.
+        Throws error for other errors
+        """
+        try:
+            prefixed_filename = message['filename'][-1]
+        except KeyError:
+            raise Exception(message)
+        self._skipped += 1
+        self._sequence += 1
 
-        if tags:
-            data['meta_data']['tags'] = tags
-        resp = await session.request('POST', self.file_upload_url, json=data, headers=headers)
-        resp.raise_for_status()
-        resp_json = await resp.json()
-        return resp_json, filepath
+        return prefixed_filename
 
     async def _upload_single_file(
         self,
-        session: aiohttp.ClientSession,
-        data: dict,
+        client: httpx.AsyncClient,
         filepath: str,
+        semaphore: asyncio.Semaphore,
+        tags: list = [],
+        convert_tiff_to: str = '.png',
+        extra: dict = {},
         **kwargs
     ):
-        url = data['url']
-        fields = data['fields']
-        form_data = aiohttp.FormData()
+        async with semaphore:
+            base_name = os.path.basename(filepath)
+            file_name, extension = os.path.splitext(base_name)
 
-        for key, value in fields.items():
-            form_data.add_field(key, value)
-        form_data.add_field('file',
-                            open(filepath, 'rb').read()
-                            )
+            if extension == '.tiff':
+                tiff_im = Image.open(filepath)
+                im = tiff_im.convert("RGB")
+                byte_im, file_size = convert_image_to_bytes(
+                    filepath, im, convert_tiff_to)
+                base_name = file_name + convert_tiff_to
+            else:
+                byte_im = open(filepath, 'rb').read()
+                file_size = os.path.getsize(filepath)
 
-        res = await session.post(
-            url,
-            headers={},
-            data=form_data
-        )
-        res.raise_for_status()
-        # await asyncio.sleep(0)
+            data = {
+                "dataset_id": self.dataset_id,
+                "file_name": base_name,
+                "file_size": file_size,
+                "meta_data": {
+                    "batch_key": self.batch_key,
+                    "sequence": self._sequence
+                }
+            }
 
-    async def _upload_files(self, files_to_upload, headers, tags):
-        async with aiohttp.ClientSession() as session:
-            tasks = []
+            if tags:
+                data['meta_data']['tags'] = tags
+            if extra:
+                data['meta_data']['extra'] = extra
 
-            for file in files_to_upload:
-                self._sequence += 1
-                tasks.append(self._get_presigned_url(
-                    session=session,
-                    filepath=file,
-                    headers=headers,
-                    tags=tags,
-                    sequence=self._sequence
-                ))
+            resp = await client.post(self.file_upload_url, json=data, headers=self.headers)
+            if resp.status_code == httpx.codes.bad_request:
+                return self._skip_file(resp.json())
+            resp.raise_for_status()
+            resp_json = resp.json()
+            self._sequence += 1
 
-            for task in asyncio.as_completed(tasks):
-                resp_json, filepath = await task
-                new_task = asyncio.create_task(self._upload_single_file(
-                    session=session,
-                    data=resp_json,
-                    filepath=filepath
-                ))
-                await new_task
+            upload_response = await client.post(
+                resp_json['url'], 
+                data=resp_json['fields'], 
+                files={'file': byte_im}
+            )
+            upload_response.raise_for_status()
+            self._uploaded += 1
+            print(f'Files uploading... {self._uploaded}', end='\r')
 
-    async def _stream_status(self, num_of_files, headers):
-        async with aiohttp.ClientSession() as session:
-            async with session.get(self.stream_url, headers=headers, timeout=None) as response:
-                finished = 0
-                while True:
-                    try:
-                        chunk = await asyncio.wait_for(response.content.read(1024), timeout=260)
-                        line = chunk.decode()
-                        line = json.loads(line[6:])
-                        if line["status"] == "finished":
-                            finished += len(line["files"])
-                        elif line["status"] == "failed":
-                            num_of_files -= len(line["files"])
-                        print(f"Files uploaded : {finished}", end="\r")
-                        if num_of_files == finished:
-                            break
-                    except asyncio.TimeoutError:
-                        break
-                    except json.JSONDecodeError:
-                        pass
+    async def _upload_single_imagefile(
+        self,
+        client: httpx.AsyncClient,
+        imagefile: object,
+        semaphore: asyncio.Semaphore,
+        **kwargs
+    ):
+        async with semaphore:
+            filepath = imagefile.filepath
+            base_name = os.path.basename(filepath)
+            byte_im = open(filepath, 'rb').read()
 
-    async def _create_files_upload_tasks(self, files_to_upload, headers, tags):
-        num_of_files = len(files_to_upload)
-        stream_task = asyncio.create_task(
-            self._stream_status(num_of_files, headers))
-        upload_task = asyncio.create_task(
-            self._upload_files(files_to_upload, headers, tags))
-        await stream_task
-        await upload_task
+            data = {
+                "dataset_id": self.dataset_id,
+                "file_name": base_name,
+                "file_size": imagefile._size,
+                "meta_data": {
+                    "batch_key": self.batch_key,
+                    "sequence": getattr(imagefile, 'sequence', None) or self._sequence
+                }
+            }
 
-    def files_upload_thread(self, files_to_upload, headers, tags):
+            if imagefile.tags:
+                data['meta_data']['tags'] = imagefile.tags
+            if imagefile.extra:
+                data['meta_data']['extra'] = imagefile.extra
+
+            resp = await client.post(self.file_upload_url, json=data, headers=self.headers)
+            if resp.status_code == httpx.codes.bad_request:
+                #check and skip uploading if the file is already uploaded
+                prefixed_filename = self._skip_file(resp.json())
+                imagefile.prefixed_filename = prefixed_filename
+                return
+            resp.raise_for_status()
+            resp_json = resp.json()
+            self._sequence += 1
+
+            fields = resp_json['fields']
+            imagefile.prefixed_filename = fields['key'].split('/')[-1]
+            upload_response = await client.post(
+                resp_json['url'], 
+                data = fields, 
+                files = {'file': byte_im}
+            )
+            upload_response.raise_for_status()
+            self._uploaded += 1
+            print(f'Files uploading... {self._uploaded}', end='\r')
+
+    async def _upload_single_base_file(
+        self,
+        client: httpx.AsyncClient,
+        basefile: object,
+        semaphore: asyncio.Semaphore,
+        **kwargsself
+    ):
+        async with semaphore:
+            base_name = os.path.basename(basefile.filepath)
+            data = {
+                "dataset_id": self.dataset_id,
+                "file_name": base_name,
+                "file_size": basefile._size,
+                "meta_data": {
+                    "batch_key": self.batch_key,
+                    "sequence": self._sequence
+                }
+            }
+
+            if basefile.tags:
+                data['meta_data']['tags'] = basefile.tags
+
+            related_files = []
+            for related_file in basefile.related_files:
+                if related_file.prefixed_filename:
+                    related_files.append(related_file.prefixed_filename)
+            if related_files:
+                data['meta_data']['related_files'] = related_files
+
+            resp = await client.post(
+                url=self.file_upload_url,
+                json=data,
+                headers=self.headers
+            )
+            if resp.status_code == httpx.codes.bad_request:
+                return self._skip_file(resp.json())
+
+            resp.raise_for_status()
+            resp_json = resp.json()
+            self._sequence += 1
+
+            presigned_url = resp_json['url']
+            fields = resp_json['fields']
+            payload = fields
+
+            res = await client.post(
+                presigned_url,
+                headers={},
+                data=payload,
+                files={'file': open(basefile.filepath, 'rb').read()}
+            )
+            res.raise_for_status()
+
+    async def _upload_raw_files(self, client: httpx.AsyncClient, uploader, file_paths: list, tags: list = [], extra: dict = {}, *args, **kwargs):
+        semaphore = asyncio.Semaphore(self.MAX_CONCURRENT_UPLOADS)
+        tasks = [uploader(client, path, semaphore) for path in file_paths]
+        await asyncio.gather(*tasks)
+
+    async def _upload_fileobjects(self, client: httpx.AsyncClient, uploader, imagefiles: list, *args, **kwargs):
+        semaphore = asyncio.Semaphore(self.MAX_CONCURRENT_UPLOADS)
+        tasks = [uploader(client, imagefile, semaphore) for imagefile in imagefiles]
+        await asyncio.gather(*tasks)
+
+    async def send_heartbeat(self, client: httpx.AsyncClient, stop_event: asyncio.Event):        
+        while not stop_event.is_set():
+            try:
+                response = await client.post(
+                    self.heartbeat_url,
+                    json={
+                        "batch_key": self.batch_key,
+                        "final": False
+                    },
+                    headers=self.headers
+                )
+                response.raise_for_status()
+            except Exception as e:
+                raise e
+                
+            try:
+                await asyncio.wait_for(stop_event.wait(), timeout=5)
+            except asyncio.TimeoutError:
+                pass
+        
         try:
-            asyncio.run(self._create_files_upload_tasks(
-                files_to_upload, headers, tags))
+            resp = await client.post(
+                self.heartbeat_url,
+                json={
+                    "batch_key": self.batch_key,
+                    "final": True
+                },
+                headers=self.headers
+            )
+            resp.raise_for_status()
         except Exception as e:
             raise e
+
+    async def _check_upload_status(self, client: httpx.AsyncClient):        
+        max_attempts = 20
+        attempt = 1 
+        while attempt < max_attempts:
+            try:
+                response = await client.get(self.stream_url, headers=self.headers)
+                response.raise_for_status()         
+                if response.json()['status'].lower() == "completed":
+                    return
+                print('processing     ........ ', end='\r')       
+            except Exception as e:
+                raise e
+            
+            await asyncio.sleep(5)
+            attempt += 1
+
+    async def files_upload_thread(
+        self,
+        raw_filepaths: list = [],
+        imagefiles: list = [],
+        basefiles: list = [],
+        tags: list = [],
+        extra: dict = {}         
+    ):
+        if raw_filepaths:
+            bulk_uploader = self._upload_raw_files
+            uploader = self._upload_single_file
+            files_to_upload = raw_filepaths
+        else:
+            bulk_uploader = self._upload_fileobjects
+            if imagefiles:
+                uploader = self._upload_single_imagefile
+                files_to_upload = imagefiles
+            elif basefiles:
+                uploader = self._upload_single_base_file
+                files_to_upload = basefiles
+            else:
+                raise Exception('No data to upload')
+        
+        self._uploaded = 0
+        self.MAX_CONCURRENT_UPLOADS = 20
+        stop_heartbeat = asyncio.Event()
+        limits = httpx.Limits(max_keepalive_connections=self.MAX_CONCURRENT_UPLOADS, max_connections=self.MAX_CONCURRENT_UPLOADS)
+        
+        async with httpx.AsyncClient(limits=limits, timeout=60.0) as client:
+            heartbeat_task = asyncio.create_task(
+                self.send_heartbeat(
+                    client,
+                    stop_heartbeat
+                )
+            )
+
+            await bulk_uploader(client, uploader, files_to_upload, tags, extra)
+            
+            stop_heartbeat.set()
+            await heartbeat_task
+            
+            await self._check_upload_status(client)
+            print('Files uploaded: ', self._uploaded, ', Files skipped: ', self._skipped)
+

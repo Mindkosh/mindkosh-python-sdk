@@ -140,6 +140,9 @@ class CoreAPI():
 
     def datasets_batch(self):
         return f"{self.datasets}/batch"
+    
+    def heartbeat(self, dataset_id):
+        return f"{self.base_url}{self.datasets}/{dataset_id}/heartbeat"
 
     def datasets_id(self, dataset_id):
         return f"{self.datasets}/{dataset_id}"

@@ -5,6 +5,7 @@ import os
 import time
 import requests
 import logging
+import asyncio
 from urllib.parse import urljoin
 from PIL import Image
 from io import BytesIO
@@ -14,7 +15,7 @@ from mindkosh.project import Project
 from mindkosh.task import Task
 from mindkosh.datasets.models import Dataset
 from mindkosh.core import CoreAPI, APIConfig
-from mindkosh.datasets.data_handler import DataSetUploader
+from mindkosh.datasets.data_handler import DataSetUploader, DataSetUploaderAsync
 from mindkosh.datasets.helpers import verify_manifest, verify_resources, validate_user_cloud_manifest_file
 from mindkosh.exceptions import (AuthorizationError, NetworkError, InternalServerError,
                                   DataSetError, DatasetFileError, SubscriptionError)
@@ -551,13 +552,14 @@ class Client:
         batch_key = self._create_dataset_batch(dataset_id)
         file_upload_url = self.api.cloud_data_action('file-upload')
         stream_url = self.api.dataset_upload_status(dataset_id, batch_key)
+        heartbeat_url = self.api.heartbeat(dataset_id)
 
         logger.warning(f"{num_of_files} files to be uploaded \n")
-
-        uploader = DataSetUploader(
-            dataset_id, batch_key, file_upload_url, stream_url, self.auth_header, data_type)
-        files_uploaded = uploader.files_upload_thread(raw_filepaths=files_to_upload, tags=tags, extra=extra)
-        self._update_files_count(files_uploaded,data_type)
+        print(file_upload_url, stream_url, heartbeat_url, self.auth_header)
+        return
+        uploader = DataSetUploaderAsync(
+            dataset_id, batch_key, file_upload_url, stream_url, heartbeat_url, self.auth_header, data_type)
+        asyncio.run(uploader.files_upload_thread(raw_filepaths=files_to_upload, tags=tags, extra=extra))
 
     def upload_imagefiles(
             self,
@@ -611,11 +613,9 @@ class Client:
 
         logger.warning(f"{num_of_files} files to be uploaded \n")
 
-        uploader = DataSetUploader(
-            dataset_id, batch_key, file_upload_url, stream_url, self.auth_header, data_type)
-        files_uploaded = uploader.files_upload_thread(imagefiles=imagefiles)
-        self._update_files_count(files_uploaded,data_type)
-    
+        uploader = DataSetUploaderAsync(
+            dataset_id, batch_key, file_upload_url, stream_url, self.api.heartbeat(dataset_id), self.auth_header, data_type)
+        asyncio.run(uploader.files_upload_thread(imagefiles=imagefiles))
 
     def _upload_basefiles(self, dataset_id, data_type, basefiles):
         sub = self.org.subscription
@@ -651,23 +651,19 @@ class Client:
         file_upload_url = self.api.cloud_data_action('file-upload')
         stream_url = self.api.dataset_upload_status(dataset_id, batch_key)
 
-        uploader = DataSetUploader(
+        uploader = DataSetUploaderAsync(
             dataset_id, batch_key, file_upload_url, stream_url,
-            self.auth_header, data_type
+            self.api.heartbeat(dataset_id), self.auth_header, data_type
         )
         
         if related_imagefiles:
             self._validate_incoming_storage('image', len(related_imagefiles), incoming_storage)
             logger.warning(f"Uploading {len(related_imagefiles)} related files")
-            files_uploaded = uploader.files_upload_thread(imagefiles=related_imagefiles, run_streaming_thread=True)
-            uploader.event.clear()
-            self._update_files_count(files_uploaded,Dataset.DataType.IMAGE)
+            asyncio.run(uploader.files_upload_thread(imagefiles=related_imagefiles))
             time.sleep(10)
 
         logger.warning(f"Uploading {len(basefiles)} {basefile_class.lower()}s")
-        files_uploaded = uploader.files_upload_thread(basefiles=basefiles)
-        self._update_files_count(files_uploaded,data_type)
-
+        asyncio.run(uploader.files_upload_thread(basefiles=basefiles))
 
     def upload_mainimages(
             self,
