@@ -250,7 +250,7 @@ class DataSetUploader:
                 return
             print('processing  . . . . . . . . . ', end='\r') 
 
-            time.sleep(5)
+            time.sleep(3)
 
     def _send_heartbeat(self, session: requests.Session):
         while not self.stop_heartbeat.is_set():
@@ -298,17 +298,17 @@ class DataSetUploader:
         try:
 
             with requests.Session() as session:
-                heartbeat_thread = threading.Thread(
-                    target=self._send_heartbeat, 
-                    args=(session,),
-                    daemon=True
-                )
-                heartbeat_thread.start()
-                time.sleep(.5)
+                # heartbeat_thread = threading.Thread(
+                #     target=self._send_heartbeat, 
+                #     args=(session,),
+                #     daemon=True
+                # )
+                # heartbeat_thread.start()
+                # time.sleep(.5)
                 bulk_uploader(session, files_to_upload, uploader, tags, extra)
 
-                self.stop_heartbeat.set()
-                heartbeat_thread.join()
+                # self.stop_heartbeat.set()
+                # heartbeat_thread.join()
 
                 self._check_final_status(session)
 
@@ -595,21 +595,21 @@ class DataSetUploaderAsync:
         
         self._uploaded = 0
         self.MAX_CONCURRENT_UPLOADS = 20
-        stop_heartbeat = asyncio.Event()
+        #stop_heartbeat = asyncio.Event()
         limits = httpx.Limits(max_keepalive_connections=self.MAX_CONCURRENT_UPLOADS, max_connections=self.MAX_CONCURRENT_UPLOADS)
         
         async with httpx.AsyncClient(limits=limits, timeout=60.0) as client:
-            heartbeat_task = asyncio.create_task(
-                self.send_heartbeat(
-                    client,
-                    stop_heartbeat
-                )
-            )
+            # heartbeat_task = asyncio.create_task(
+            #     self.send_heartbeat(
+            #         client,
+            #         stop_heartbeat
+            #     )
+            # )
 
             await bulk_uploader(client, uploader, files_to_upload, tags, extra)
             
-            stop_heartbeat.set()
-            await heartbeat_task
+            #stop_heartbeat.set()
+            #await heartbeat_task
             
             await self._check_upload_status(client)
             print('Files uploaded: ', self._uploaded, ', Files skipped: ', self._skipped)

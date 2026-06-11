@@ -549,14 +549,11 @@ class Client:
             raise Exception("No data to be uploaded")
 
         self._validate_incoming_storage(data_type, num_of_files)
-        batch_key = self._create_dataset_batch(dataset_id)
+        batch_key = self._create_dataset_batch(dataset_id, num_of_files)
         file_upload_url = self.api.cloud_data_action('file-upload')
         stream_url = self.api.dataset_upload_status(dataset_id, batch_key)
         heartbeat_url = self.api.heartbeat(dataset_id)
-
-        logger.warning(f"{num_of_files} files to be uploaded \n")
-        print(file_upload_url, stream_url, heartbeat_url, self.auth_header)
-        return
+        logger.warning(f"{num_of_files} files to be uploaded\n")
         uploader = DataSetUploaderAsync(
             dataset_id, batch_key, file_upload_url, stream_url, heartbeat_url, self.auth_header, data_type)
         asyncio.run(uploader.files_upload_thread(raw_filepaths=files_to_upload, tags=tags, extra=extra))
@@ -607,12 +604,11 @@ class Client:
         if data_type != Dataset.DataType.IMAGE.value:
             raise DataSetError('Invalid dataset type')
 
-        batch_key = self._create_dataset_batch(dataset_id)
+        batch_key = self._create_dataset_batch(dataset_id, num_of_files)
         file_upload_url = self.api.cloud_data_action('file-upload')
         stream_url = self.api.dataset_upload_status(dataset_id, batch_key)
 
         logger.warning(f"{num_of_files} files to be uploaded \n")
-
         uploader = DataSetUploaderAsync(
             dataset_id, batch_key, file_upload_url, stream_url, self.api.heartbeat(dataset_id), self.auth_header, data_type)
         asyncio.run(uploader.files_upload_thread(imagefiles=imagefiles))
@@ -647,7 +643,7 @@ class Client:
             raise SubscriptionError(f"{invalid_files} files are larger than max_size limit for current subscription plan")
     
         self._validate_incoming_storage(data_type, len(basefiles), incoming_storage)
-        batch_key = self._create_dataset_batch(dataset_id)
+        batch_key = self._create_dataset_batch(dataset_id, len(related_imagefiles))
         file_upload_url = self.api.cloud_data_action('file-upload')
         stream_url = self.api.dataset_upload_status(dataset_id, batch_key)
 
@@ -662,6 +658,7 @@ class Client:
             asyncio.run(uploader.files_upload_thread(imagefiles=related_imagefiles))
             time.sleep(10)
 
+        uploader.batch_key = self._create_dataset_batch(dataset_id, len(basefiles))
         logger.warning(f"Uploading {len(basefiles)} {basefile_class.lower()}s")
         asyncio.run(uploader.files_upload_thread(basefiles=basefiles))
 
@@ -705,10 +702,11 @@ class Client:
         dst.raise_for_status()
         return dst.json()['data_type']
 
-    def _create_dataset_batch(self, dataset_id):
+    def _create_dataset_batch(self, dataset_id, expected_file_ct):
         """Returns : batch_key"""
         response = self._post(self.api.datasets_batch(),
-                              payload={'dataset_id': dataset_id})
+                              payload={'dataset_id': dataset_id,
+                                       'expected_file_count': expected_file_ct})
         return response['batch_key']
     
     def _update_files_count(self, files_uploaded, data_type):
