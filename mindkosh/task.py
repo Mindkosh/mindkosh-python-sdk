@@ -777,7 +777,6 @@ class Task:
         qc_data: int = 20,
         multi_annotators: bool = False,
         preferences: dict = {},
-        validations: dict = {},
         **kwargs
     ) -> "Task | str":
         
@@ -816,11 +815,8 @@ class Task:
             label.attributes = [att.__dict__ for att in label.attributes]
             labels_json.append(label.__dict__)
 
-        default_validations = cls.get_default_validations()
         default_preferences = cls.get_default_preferences()
         for dt in (Dataset.DataType.POINTCLOUD.value, Dataset.DataType.IMAGE.value):
-            if dt not in validations:
-                validations[dt] = default_validations[dt]
             if dt not in preferences:
                 preferences[dt] = default_preferences[dt]
         
@@ -835,7 +831,6 @@ class Task:
             },
             'qc_data': qc_data,
             'multi_annotators': multi_annotators,
-            'set_validations' : validations,
             'set_preferences' : preferences
         }
         if project_id:
