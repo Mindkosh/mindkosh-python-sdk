@@ -1,19 +1,18 @@
-from flask import Flask, request, Response
+from flask import Flask, request, jsonify
 
 PORT = 5000
 app = Flask(__name__)
 
 
-@app.route("/")
-def hello():
-    return "Hello, World!"
-
-
-@app.route("/my-webhook", methods=["POST"])
+@app.route("/mindkosh", methods=["POST"])
 def mindkosh():
-    print(request.json)
-    return Response(status=200)
-
+    try:
+        return jsonify(request.json), 200
+    except Exception as e:
+        return jsonify({
+            "status": "failed",
+            "details": str(e)
+        }), 500
 
 if __name__ == "__main__":
     app.run(port=PORT,debug=True)

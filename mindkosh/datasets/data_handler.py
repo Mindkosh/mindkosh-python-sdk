@@ -12,8 +12,8 @@ import logging
 from PIL import Image
 from typing import Union
 
-from .utils import convert_image_to_bytes
-from .helpers import DatasetFile
+from mindkosh.datasets.utils import convert_image_to_bytes
+from mindkosh.datasets.helpers import DatasetFile
 
 logger = logging.getLogger(__name__)
 

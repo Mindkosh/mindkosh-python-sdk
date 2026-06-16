@@ -5,25 +5,6 @@ import re
 from enum import Enum
 
 
-class DataSetProperty:
-
-    DEFAULT_BUCKET_REGION = 'ap-south-1'
-
-    class DataType(Enum):
-        IMAGE = 'image'
-        VIDEO = 'video'
-        POINTCLOUD = 'pointcloud'
-        AUDIO = 'audio'
-
-        @classmethod
-        def values(cls):
-            return tuple((x.value, x.name) for x in cls)
-
-    class StorageMethod(Enum):
-        USER_CLOUD = 'user_cloud'
-        VK_CLOUD = 'vk_cloud'
-
-
 class AnnotationFormats:
 
     POINTCLOUD = {"mindkosh_3d" : "Mindkosh-3D"}

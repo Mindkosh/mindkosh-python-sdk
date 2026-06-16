@@ -3,7 +3,7 @@
 
 import re
 from enum import Enum
-from .exceptions import InvalidLabelError
+from mindkosh.exceptions import InvalidLabelError
 
 
 class LabelType(str, Enum):

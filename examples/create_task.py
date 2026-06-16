@@ -48,13 +48,17 @@ label2 = Label(
 
 
 # create task
+validations = client.task.get_default_validations()
+validations['pointcloud']['all_points_segmented'] = True
+
 task = client.task.create(
     name=name,
     labels=[label1, label2],
     dataset_id=dataset_id,
-    batches=2
+    batches=2,
+    validations=validations
 )
 
-print(task.name)
+print(task)
 
 task.update_name("New name - " + task.name)
