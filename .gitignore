@@ -8,3 +8,4 @@ mindkosh/*.pyc
 *.zip
 mindkosh/__pycache__/
 mindkosh/__pycache__/*
+.vscode

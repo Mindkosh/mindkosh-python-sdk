@@ -20,7 +20,9 @@ dependencies = [
     "aiohttp>=3.8.6",
     "alive-progress>=2.4.1",
     "validators",
-    "python-dotenv"
+    "python-dotenv",
+    "numpy",
+    "pointcloudkit"
 ]
 keywords = [
     "annotation",
@@ -34,9 +36,16 @@ license = {text = "Apache-2.0"}
 Homepage = "https://mindkosh.com"
 Repository = "https://github.com/Mindkosh/mindkosh-python-sdk"
 
+[project.scripts]
+mindkosh-semantic-kitti = "mindkosh.utilities.mindkosh_semantic_kitti:main"
+mindkosh-copy-files = "mindkosh.utilities.copy_files_with_unique_names:main"
+
 [tool.setuptools.dynamic]
 version = {attr = "mindkosh.__version__"}
 
 [tool.setuptools]
 package-dir = {"" = "."}
 packages = {find = {include = ["mindkosh*"]}}
+
+[tool.setuptools.package-data]
+"mindkosh.utilities" = ["*.json"]
