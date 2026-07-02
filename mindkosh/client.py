@@ -303,7 +303,7 @@ class Client:
                 logger.info(msg)
                 return msg
             
-            elif response.status_code == requests.code.bad_request:
+            elif response.status_code == requests.codes.bad_request:
                 raise Exception(response.text)
             response.raise_for_status()
 
@@ -557,7 +557,7 @@ class Client:
         uploader = DataSetUploader(
             dataset_id, batch_key, file_upload_url, stream_url, self.auth_header, data_type)
         files_uploaded = uploader.files_upload_thread(raw_filepaths=files_to_upload, tags=tags, extra=extra)
-        self._update_files_count(files_uploaded,data_type)
+        #self._update_files_count(files_uploaded,data_type)
 
     def upload_imagefiles(
             self,
@@ -614,7 +614,7 @@ class Client:
         uploader = DataSetUploader(
             dataset_id, batch_key, file_upload_url, stream_url, self.auth_header, data_type)
         files_uploaded = uploader.files_upload_thread(imagefiles=imagefiles)
-        self._update_files_count(files_uploaded,data_type)
+        #self._update_files_count(files_uploaded,data_type)
     
 
     def _upload_basefiles(self, dataset_id, data_type, basefiles):
@@ -661,12 +661,12 @@ class Client:
             logger.warning(f"Uploading {len(related_imagefiles)} related files")
             files_uploaded = uploader.files_upload_thread(imagefiles=related_imagefiles, run_streaming_thread=True)
             uploader.event.clear()
-            self._update_files_count(files_uploaded,Dataset.DataType.IMAGE)
+            #self._update_files_count(files_uploaded,Dataset.DataType.IMAGE)
             time.sleep(10)
 
         logger.warning(f"Uploading {len(basefiles)} {basefile_class.lower()}s")
         files_uploaded = uploader.files_upload_thread(basefiles=basefiles)
-        self._update_files_count(files_uploaded,data_type)
+        #self._update_files_count(files_uploaded,data_type)
 
 
     def upload_mainimages(
@@ -739,4 +739,3 @@ class Client:
 
             if incoming_storage and self.org.storage_consumed_in_bytes + incoming_storage > sub['values']['max_storage']:
                 raise SubscriptionError('Organization has exhausted the maximum storage allowed under current Subscription plan')
-

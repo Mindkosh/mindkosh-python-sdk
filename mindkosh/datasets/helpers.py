@@ -197,6 +197,16 @@ def verify_manifest(manifest, save_files_dir, dataset_id, category):
     return files
 
 
+def validate_custom_meta_data(data: dict = {}):
+    if len(data) > 10:
+        raise Exception(
+            "custom meta data can not contain more than 10 elements"
+        )
+    if any(isinstance(val, dict) for val in data.values()):
+        raise Exception(
+            "custom meta data doesn't support inner dicts"
+        )
+
 def validate_related_file_extra(extra: dict):
     errors = []
     device_id = extra.get('device_id', None)
@@ -271,6 +281,7 @@ def validate_user_cloud_manifest_file(manifest_filepath, data_type):
                 raise Exception(f"Invalid tags list for ref_image {filepath}")
             
             validate_related_file_extra(ref_img['camera_params'])
+            validate_custom_meta_data(ref_img.get('custom_meta_data', {}))
 
-    if len(sequence_list) != len(set(sequence_list)):
-        raise Exception("Duplicate sequence value found")
+    # if len(sequence_list) != len(set(sequence_list)):
+    #     raise Exception("Duplicate sequence value found")
