@@ -1,5 +1,5 @@
 # Copyright (C) 2023 Mindkosh Technologies. All rights reserved.
-__version__ = "1.1.0"
+__version__ = "1.1.1"
 from mindkosh.client import Client
 from mindkosh.annotations.testset import TestSet
 from mindkosh.label import Label
