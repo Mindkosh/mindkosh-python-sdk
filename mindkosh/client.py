@@ -234,12 +234,16 @@ class Client:
             data_type: str,
             resource: str,
             directory: str,
-            location: str = 'ap-south-1'
+            location: str,
+            cloud_service_type: str,
+            **kwargs
     ):
         data_type = data_type.lower()
         data_type = Dataset.DataType(data_type).value
         
-        cloud_service_type = 'aws'
+        cloud_service_type = cloud_service_type.lower()
+        if cloud_service_type not in ('aws', 'gcp'):
+            raise Exception("Invalid cloud service type")
         location = location or Dataset.DEFAULT_BUCKET_REGION
         url = self.api.datasets_storage_method('user_cloud')
         payload = {
