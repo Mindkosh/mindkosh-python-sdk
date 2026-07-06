@@ -1,5 +1,6 @@
 import os
 import validators
+from mindkosh.datasets.helpers import validate_custom_meta_data
 from enum import Enum
 from mindkosh.exceptions import DatasetFileError
 
@@ -113,8 +114,11 @@ class ImageFile:
         if basefile_extension == '.pcd':
             allowed_extra.extend(['intrinsic', 'extrinsic', 'distortion', 'mirror', 'cameraModel'])
         
-        if not all(item in allowed_extra for item in self._extra):
-            raise DatasetFileError('RelatedFile.extra got unexpected items')
+        _custom_meta_data = {}
+        for k,v in self._extra.items():
+            if k not in allowed_extra:
+                _custom_meta_data[k] = v
+        validate_custom_meta_data(_custom_meta_data)
         
         errors = []        
         supported_url = self._extra.get('supported_file_url', None)
