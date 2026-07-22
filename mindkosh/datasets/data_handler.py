@@ -194,6 +194,8 @@ class DataSetUploader:
 
         if basefile.tags:
             data['meta_data']['tags'] = basefile.tags
+        if basefile.extra:
+            data['meta_data']['extra'] = basefile.extra
 
         related_files = []
         for related_file in basefile.related_files:
