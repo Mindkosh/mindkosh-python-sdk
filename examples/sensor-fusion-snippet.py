@@ -7,7 +7,9 @@ left_cam1 = 'left_0000.jpg'
 pcdfilepath1 = 'lidar_0000.pcd'
 
 pcdfile1 = PointCloudFile(
-    filepath=pcdfilepath1,
+    filepath = pcdfilepath1,
+    supported_file_url = 'https://app.mindkosh.com',
+    custom_meta_data = {'field2': 'val2', 'field3': [1,2]},
     related_files=[
         ImageFile(
             filepath=front_cam1,

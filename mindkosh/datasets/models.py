@@ -1,4 +1,5 @@
 import os
+import re
 import validators
 from mindkosh.datasets.helpers import validate_custom_meta_data
 from enum import Enum
@@ -26,11 +27,27 @@ class Dataset:
         VK_CLOUD = 'vk_cloud'
 
 
+def validate_tags(tags):
+    if not isinstance(tags, (list, tuple)) or len(tags) > 10:
+        raise DatasetFileError(
+            "tags: a list/tuple (max length 10) is required."
+        )
+
+    if not all(
+        isinstance(tag, str) and re.compile(r"^[a-zA-Z0-9+\-=\._:/]+$").match(tag)
+        for tag in tags
+    ):
+        raise DatasetFileError(
+            "tags: tag shouldn't contain a whitespace or disallowed special chars"
+        )
+
 class BaseFile:
     def __init__(
         self,
         filepath: str,
         related_files: list = [],
+        supported_file_url: str = '',
+        custom_meta_data: dict = {},
         tags: list = []
     ):
         if not os.path.exists(filepath):
@@ -38,13 +55,17 @@ class BaseFile:
         
         self.filepath = filepath
         self.related_files = related_files
-        self._validate_tags(tags)
+        if supported_file_url and not validators.url(supported_file_url):
+            raise DatasetFileError('Invalid supported_file_url')
+        validate_custom_meta_data(custom_meta_data)
+        self.extra = {}
+        if supported_file_url:
+            self.extra['supported_file_url'] = supported_file_url
+        if custom_meta_data:
+            self.extra['custom_meta_data'] = custom_meta_data
+        validate_tags(tags)
         self.tags = tags
         self._size = os.path.getsize(filepath)
-
-    def _validate_tags(self, tags):
-        if len(tags)>10 or not all(isinstance(tag, str) for tag in tags):
-            raise DatasetFileError('tags: a list(max length 10) of items is required')
         
     def _validate_related_files(self, basefile_extension):
         if len(self.related_files) > 20:
@@ -68,9 +89,11 @@ class PointCloudFile(BaseFile):
     def __init__(self,
         filepath: str,
         related_files: list = [],
+        supported_file_url: str = '',
+        custom_meta_data: dict = {},
         tags: list = []
     ):
-        super().__init__(filepath, related_files, tags)
+        super().__init__(filepath, related_files, supported_file_url, custom_meta_data, tags)
         extension = os.path.splitext(filepath)[1]
         if extension != '.pcd':
             raise DatasetFileError("Invalid pcd file")
@@ -101,13 +124,9 @@ class ImageFile:
         self.filepath = filepath
         self._extra = extra
         self.extra = None
-        self._validate_tags(tags)
+        validate_tags(tags)
         self.tags = tags
         self._size = os.path.getsize(filepath)
-
-    def _validate_tags(self, tags):
-        if len(tags)>10 or not all(isinstance(tag, str) for tag in tags):
-            raise DatasetFileError('tags: a list(max length 10) of items is required')
 
     def validate_extra(self, basefile_extension):
         allowed_extra = ['device_id', 'supported_file_url']
