@@ -244,7 +244,7 @@ def validate_related_file_extra(extra: dict):
 
 def validate_user_cloud_manifest_file(manifest_filepath, data_type):
     json_data = json.load(open(manifest_filepath, 'r'))
-    if len(json_data) > 10000:
+    if len(json_data) > 100000:
         raise Exception("File too large")
     
     valid_relatedfile_types = ('.jpg', '.jpeg', '.png')
