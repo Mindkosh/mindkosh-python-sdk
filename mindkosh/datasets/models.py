@@ -104,9 +104,11 @@ class MainImage(BaseFile):
     def __init__(self,
         filepath: str,
         related_files: list = [],
+        supported_file_url: str = '',
+        custom_meta_data: dict = {},
         tags: list = []
     ):
-        super().__init__(filepath, related_files, tags)
+        super().__init__(filepath, related_files, supported_file_url, custom_meta_data, tags)
         extension = os.path.splitext(filepath)[1]
         if extension not in ('.jpg', '.png', '.jpeg'):
             raise DatasetFileError(f"'{extension}' files are not supported")
